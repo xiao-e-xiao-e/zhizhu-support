@@ -1,0 +1,19 @@
+# 敏感信息
+.env
+
+# ChromaDB 数据库
+chroma_db/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# 聊天记录
+chat_history.json

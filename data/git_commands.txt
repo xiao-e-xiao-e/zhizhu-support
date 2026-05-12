@@ -1,0 +1,72 @@
+Git 常用命令速查
+==================
+
+=== 基础操作 ===
+
+git init                    初始化仓库
+git clone <url>             克隆远程仓库
+git status                  查看工作区状态
+git add <file>              暂存文件
+git add .                   暂存所有变更
+git commit -m "msg"         提交暂存的变更
+git push                    推送到远程
+git pull                    拉取远程更新
+git fetch                   获取远程信息（不合并）
+
+=== 分支管理 ===
+
+git branch                  列出本地分支
+git branch -a               列出所有分支（含远程）
+git branch <name>           创建分支
+git checkout <branch>       切换分支
+git checkout -b <name>      创建并切换到新分支
+git switch <branch>         切换分支（新版命令）
+git switch -c <name>        创建并切换到新分支
+git merge <branch>          合并指定分支到当前分支
+git branch -d <name>        删除已合并的分支
+git branch -D <name>        强制删除分支
+git push origin --delete <name>  删除远程分支
+
+=== 撤销操作 ===
+
+git checkout -- <file>      撤销工作区文件的修改
+git reset HEAD <file>       取消暂存
+git reset --soft HEAD~1     撤销最近一次 commit（保留变更）
+git reset --hard HEAD~1     撤销最近一次 commit（丢弃变更）
+git revert <commit>         创建一个新 commit 来撤销指定 commit
+git stash                   暂存当前工作区的变更
+git stash pop               恢复最近一次 stash
+git stash list              查看 stash 列表
+
+=== 查看历史 ===
+
+git log                     查看提交历史
+git log --oneline           简洁模式
+git log --graph --oneline   图形化分支历史
+git log --author="name"     按作者筛选
+git diff                    查看未暂存的变更
+git diff --staged           查看已暂存的变更
+git show <commit>           查看指定 commit 的详情
+git blame <file>            查看文件每行的修改记录
+
+=== 远程仓库 ===
+
+git remote -v               查看远程仓库信息
+git remote add <name> <url> 添加远程仓库
+git remote remove <name>    删除远程仓库
+git push -u origin <branch> 推送并设置上游分支
+git push --force            强制推送（⚠️ 危险操作）
+
+=== 标签 ===
+
+git tag                     列出标签
+git tag -a v1.0 -m "msg"    创建附注标签
+git push origin v1.0        推送标签到远程
+git push --tags             推送所有标签
+
+=== 高级操作 ===
+
+git rebase <branch>         将当前分支变基到指定分支
+git cherry-pick <commit>    将指定 commit 应用到当前分支
+git bisect start            二分查找引入 bug 的 commit
+git reflog                  查看 HEAD 的所有变更历史

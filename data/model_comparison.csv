@@ -1,0 +1,11 @@
+Model,Provider,Parameters,Context Window,Cost per 1M Input (USD),Cost per 1M Output (USD),Release Date,Strengths
+GPT-4o,OpenAI,Undisclosed,128K,$2.50,$10.00,2024-05,Best overall reasoning and multimodal
+GPT-4o-mini,OpenAI,Undisclosed,128K,$0.15,$0.60,2024-07,Cost-effective for simple tasks
+Claude Opus 4.7,Anthropic,Undisclosed,200K,$15.00,$75.00,2026-04,Best for complex reasoning and code
+Claude Sonnet 4.6,Anthropic,Undisclosed,200K,$3.00,$15.00,2026-04,Balanced performance and cost
+DeepSeek-V3,DeepSeek,671B MoE,128K,$0.27,$1.10,2024-12,Excellent Chinese and coding capability
+DeepSeek-R1,DeepSeek,671B MoE,128K,$0.55,$2.19,2025-01,Best open-weight reasoning model
+MiMo V2.5,Xiaomi,Undisclosed,128K,$0.14,$0.56,2026-01,Strong multimodal and Chinese support
+Gemini 2.5 Pro,Google,Undisclosed,1M,$2.50,$10.00,2025-06,Best for ultra-long context
+Qwen3-235B,Alibaba,235B MoE,128K,$0.20,$0.80,2025-09,Strong Chinese with competitive pricing
+Llama 4, Meta,Undisclosed,128K,$0.30,$0.60,2025-04,Open-weight with flexible deployment
