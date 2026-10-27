@@ -17,3 +17,19 @@ venv/
 
 # 聊天记录
 chat_history.json
+
+# Node / 前端构建产物
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+*.log
+.DS_Store
+Thumbs.db
+
+# 本地协作元数据
+.workbuddy-ai/
+
+# 嵌入模型缓存（100MB+，首次使用自动下载，不入库）
+.model_cache/
