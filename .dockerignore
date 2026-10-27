@@ -1,0 +1,16 @@
+.git
+**/node_modules
+**/dist
+**/.venv*
+**/__pycache__
+**/.pytest_cache
+**/.model_cache
+**/storage
+**/*.log
+.env
+.env.*.local
+**/.env
+**/.env.*.local
+chroma_db
+chat_history.json
+.workbuddy-ai

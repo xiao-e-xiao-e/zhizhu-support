@@ -1,0 +1,110 @@
+name: support-platform
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: support
+      POSTGRES_USER: support
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U support -d support"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+  api:
+    image: ${COMPOSE_PROJECT_NAME:-support-platform}-api:latest
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://support:${POSTGRES_PASSWORD}@db:5432/support
+      APP_ENV: ${APP_ENV:-development}
+      DEMO_MODE: ${DEMO_MODE:-false}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://127.0.0.1:8080,http://localhost:8080}
+      API_KEY: ${API_KEY:-}
+      API_BASE_URL: ${API_BASE_URL:-https://api.deepseek.com}
+      CHAT_MODEL: ${CHAT_MODEL:-deepseek-v4-flash}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-small-zh-v1.5}
+      EMBEDDING_CACHE_DIR: /app/.model_cache
+      CHROMA_HOST: chroma
+      CHROMA_PORT: 8000
+      DOCUMENT_STORAGE_DIR: /app/storage/documents
+      QUERY_REWRITE_ENABLED: ${QUERY_REWRITE_ENABLED:-true}
+      REWRITE_MAX_TOKENS: ${REWRITE_MAX_TOKENS:-160}
+      DEEPSEEK_THINKING: ${DEEPSEEK_THINKING:-false}
+      MAX_TOKENS: ${MAX_TOKENS:-1024}
+      AGENT_MAX_STEPS: ${AGENT_MAX_STEPS:-6}
+      AGENT_MAX_ROUNDS: ${AGENT_MAX_ROUNDS:-4}
+      AGENT_TIMEOUT_SECONDS: ${AGENT_TIMEOUT_SECONDS:-60}
+      AGENT_CALL_TIMEOUT_SECONDS: ${AGENT_CALL_TIMEOUT_SECONDS:-15}
+      AGENT_TOKEN_BUDGET: ${AGENT_TOKEN_BUDGET:-16000}
+      WARMUP_ON_STARTUP: ${WARMUP_ON_STARTUP:-true}
+    volumes:
+      - model_cache:/app/.model_cache
+      - document_storage:/app/storage
+    depends_on:
+      db: { condition: service_healthy }
+      chroma: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/ready', timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      start_period: 180s
+      retries: 5
+    restart: unless-stopped
+  chroma:
+    image: ${COMPOSE_PROJECT_NAME:-support-platform}-api:latest
+    command: ["chroma", "run", "--path", "/data/chroma", "--host", "0.0.0.0", "--port", "8000"]
+    volumes:
+      - chroma_data:/data/chroma
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v2/heartbeat', timeout=5)"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    restart: unless-stopped
+  worker:
+    image: ${COMPOSE_PROJECT_NAME:-support-platform}-api:latest
+    command: ["python", "worker.py"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://support:${POSTGRES_PASSWORD}@db:5432/support
+      APP_ENV: ${APP_ENV:-development}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://127.0.0.1:8080,http://localhost:8080}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-small-zh-v1.5}
+      EMBEDDING_CACHE_DIR: /app/.model_cache
+      CHROMA_HOST: chroma
+      CHROMA_PORT: 8000
+      DOCUMENT_STORAGE_DIR: /app/storage/documents
+      JOB_LEASE_SECONDS: ${JOB_LEASE_SECONDS:-120}
+    volumes:
+      - model_cache:/app/.model_cache
+      - document_storage:/app/storage
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "from app.services.knowledge import queue_status; assert queue_status()['worker_online']"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    stop_grace_period: 60s
+    restart: unless-stopped
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:80"
+    depends_on:
+      api: { condition: service_healthy }
+    restart: unless-stopped
+volumes:
+  postgres_data:
+  model_cache:
+  chroma_data:
+  document_storage:
