@@ -13,9 +13,10 @@ from __future__ import annotations
 
 import logging
 import threading
+from typing import TYPE_CHECKING
 
-import chromadb
-from chromadb.config import Settings as ChromaSettings
+if TYPE_CHECKING:
+    import chromadb
 
 from ..core.config import get_settings
 from .embedding import get_embedding_service
@@ -31,12 +32,17 @@ def get_client() -> chromadb.ClientAPI:
     if _client is None:
         with _lock:
             if _client is None:
+                import chromadb
+                from chromadb.config import Settings as ChromaSettings
+
                 settings = get_settings()
-                settings.chroma_dir.mkdir(parents=True, exist_ok=True)
-                _client = chromadb.PersistentClient(
-                    path=str(settings.chroma_dir),
-                    settings=ChromaSettings(anonymized_telemetry=False),
-                )
+                if settings.chroma_host:
+                    _client = chromadb.HttpClient(host=settings.chroma_host, port=settings.chroma_port,
+                                                 settings=ChromaSettings(anonymized_telemetry=False))
+                else:
+                    settings.chroma_dir.mkdir(parents=True, exist_ok=True)
+                    _client = chromadb.PersistentClient(path=str(settings.chroma_dir),
+                                                       settings=ChromaSettings(anonymized_telemetry=False))
     return _client
 
 
@@ -102,7 +108,7 @@ def describe_collection() -> dict:
     }
 
 
-def add_documents(filename: str, chunks: list[str]) -> int:
+def add_documents(filename: str, chunks: list[str], *, product_id: str | None = None, version_id: str | None = None) -> int:
     """把一批 chunk 编码后写入集合。同名文件按 source 幂等覆盖。"""
     if not chunks:
         return 0
@@ -113,6 +119,10 @@ def add_documents(filename: str, chunks: list[str]) -> int:
     # 幂等：先按 source 清掉旧版本。原实现只按固定 id 清，
     # 当同一文件重新上传且分块数变多时会残留旧 chunk。
     existing = collection.get(where={"source": filename})
+    for metadata in existing.get("metadatas") or []:
+        current_scope = ((metadata or {}).get("product_id") or None, (metadata or {}).get("version_id") or None)
+        if current_scope != (product_id, version_id):
+            raise ValueError("同名文档属于其他产品或版本，请更换文件名或先调整分类")
     if existing["ids"]:
         collection.delete(ids=existing["ids"])
 
@@ -120,7 +130,8 @@ def add_documents(filename: str, chunks: list[str]) -> int:
         ids=[f"{filename}::chunk::{i}" for i in range(len(chunks))],
         embeddings=embeddings,
         documents=chunks,
-        metadatas=[{"source": filename, "chunk_index": i} for i in range(len(chunks))],
+        metadatas=[{"source": filename, "chunk_index": i, "product_id": product_id or "", "version_id": version_id or ""}
+                   for i in range(len(chunks))],
     )
     return len(chunks)
 
@@ -129,8 +140,13 @@ def search(
     query: str,
     top_k: int = 5,
     similarity_threshold: float = 0.0,
+    product_id: str | None = None,
+    version_id: str | None = None,
+    revision_ids: list[str] | None = None,
 ) -> list[dict]:
     """语义检索。返回按相似度降序排列的片段。"""
+    if revision_ids == []:
+        return []
     collection = get_collection()
     total = collection.count()
     if total == 0:
@@ -138,10 +154,19 @@ def search(
 
     query_vector = get_embedding_service().embed_query(query)
 
+    filters = []
+    if product_id:
+        filters.append({"product_id": product_id})
+    if version_id:
+        filters.append({"version_id": version_id})
+    if revision_ids is not None:
+        filters = [{"revision_id": {"$in": revision_ids}}]
+    where = {"$and": filters} if len(filters) > 1 else filters[0] if filters else None
     result = collection.query(
         query_embeddings=[query_vector],
         n_results=min(top_k, total),
         include=["documents", "metadatas", "distances"],
+        where=where,
     )
 
     ids = result["ids"][0] if result["ids"] else []
@@ -165,24 +190,54 @@ def search(
                 "chunk_index": meta.get("chunk_index", i),
                 "similarity": round(similarity, 4),
                 "distance": round(distance, 4),
+                "document_id": meta.get("document_id"),
+                "revision_id": meta.get("revision_id"),
+                "revision_number": meta.get("revision_number"),
             }
         )
     return items
+
+
+def upsert_revision(document_id: str, revision_id: str, number: int, filename: str, chunks: list[str],
+                    embeddings: list[list[float]]) -> None:
+    if len(chunks) != len(embeddings) or not chunks:
+        raise ValueError("无有效分块或向量数量不一致")
+    collection = get_collection()
+    for start in range(0, len(chunks), 128):
+        stop = min(start + 128, len(chunks))
+        collection.upsert(ids=[f"revision::{revision_id}::{i}" for i in range(start, stop)],
+                          documents=chunks[start:stop], embeddings=embeddings[start:stop],
+                          metadatas=[{"source": filename, "document_id": document_id, "revision_id": revision_id,
+                                      "revision_number": number, "chunk_index": i} for i in range(start, stop)])
+    count = len(collection.get(where={"revision_id": revision_id}, include=[])["ids"])
+    if count != len(chunks):
+        raise RuntimeError("向量写入数量校验失败")
 
 
 def list_documents() -> list[dict]:
     """列出已入库文件及其分块数。"""
     collection = get_collection()
     data = collection.get(include=["metadatas"])
-    counter: dict[str, int] = {}
+    counter: dict[str, dict] = {}
     for meta in data["metadatas"] or []:
         source = (meta or {}).get("source", "")
         if source:
-            counter[source] = counter.get(source, 0) + 1
-    return [
-        {"source": name, "chunks": count}
-        for name, count in sorted(counter.items())
-    ]
+            if source not in counter:
+                counter[source] = {"source": source, "chunks": 0, "product_id": meta.get("product_id") or None,
+                                   "version_id": meta.get("version_id") or None}
+            counter[source]["chunks"] += 1
+    return [counter[name] for name in sorted(counter)]
+
+
+def set_document_scope(filename: str, product_id: str | None, version_id: str | None) -> int:
+    collection = get_collection()
+    data = collection.get(where={"source": filename}, include=["metadatas"])
+    if not data["ids"]:
+        return 0
+    metadatas = [{**(meta or {}), "product_id": product_id or "", "version_id": version_id or ""}
+                 for meta in data["metadatas"]]
+    collection.update(ids=data["ids"], metadatas=metadatas)
+    return len(data["ids"])
 
 
 def get_document_chunks(filename: str) -> list[dict]:

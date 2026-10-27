@@ -1,25 +1,27 @@
 """API 请求 / 响应模型。"""
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+from .business_schemas import KnowledgeScope
 
 
-class LLMOverride(BaseModel):
-    api_key: str | None = None
-    api_base_url: str | None = None
-    chat_model: str | None = None
+class HistoryMessage(BaseModel):
+    role: str = Field(pattern="^(user|assistant)$")
+    content: str = Field(max_length=8000)
 
 
-class AskRequest(BaseModel):
-    question: str = Field(..., min_length=1, description="用户问题")
-    session: str | None = Field(default=None, description="会话名，留空则不落盘")
+class AskRequest(KnowledgeScope):
+    model_config = ConfigDict(extra="forbid")
+    question: str = Field(..., min_length=1, max_length=6000, description="用户问题")
+    session: str | None = Field(default=None, min_length=1, max_length=120, description="会话名，留空则不落盘")
     top_k: int = Field(default=5, ge=1, le=20)
     temperature: float = Field(default=0.3, ge=0.0, le=2.0)
     similarity_threshold: float = Field(default=0.0, ge=0.0, le=1.0)
-    llm: LLMOverride | None = None
+    history: list[HistoryMessage] = Field(default_factory=list, max_length=12)
 
 
-class SearchRequest(BaseModel):
+class SearchRequest(KnowledgeScope):
     query: str = Field(..., min_length=1)
     top_k: int = Field(default=5, ge=1, le=50)
     similarity_threshold: float = Field(default=0.0, ge=0.0, le=1.0)
@@ -42,6 +44,8 @@ class ChunkHit(BaseModel):
 class DocumentOut(BaseModel):
     source: str
     chunks: int
+    product_id: str | None = None
+    version_id: str | None = None
 
 
 class StatsOut(BaseModel):
@@ -53,13 +57,13 @@ class StatsOut(BaseModel):
 
 class MessageIn(BaseModel):
     role: str = Field(..., pattern="^(user|assistant)$")
-    content: str
+    content: str = Field(max_length=20000)
     sources: list[str] = Field(default_factory=list)
     contexts: list[dict] = Field(default_factory=list)
 
 
-class SessionSaveRequest(BaseModel):
-    messages: list[MessageIn]
+class SessionSaveRequest(KnowledgeScope):
+    messages: list[MessageIn] = Field(max_length=1000)
 
 
 class SessionSummary(BaseModel):
@@ -71,6 +75,9 @@ class SessionSummary(BaseModel):
 
 class SessionDetail(BaseModel):
     name: str
+    id: str | None = None
+    product_id: str | None = None
+    version_id: str | None = None
     created_at: str = ""
     updated_at: str = ""
     messages: list[dict] = Field(default_factory=list)

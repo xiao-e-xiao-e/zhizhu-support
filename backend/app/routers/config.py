@@ -1,9 +1,13 @@
 """配置与健康检查路由。"""
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
+from ..core.auth import current_user
 from ..core.config import get_settings
+from ..core.database import session_factory
 from ..services import vectorstore
 from ..services.embedding import get_embedding_service
 
@@ -15,7 +19,17 @@ def health() -> dict:
     return {"status": "ok"}
 
 
-@router.get("/config")
+@router.get("/ready")
+def ready():
+    try:
+        with session_factory()() as db:
+            db.execute(text("SELECT 1 FROM users LIMIT 1"))
+    except Exception:
+        return JSONResponse({"status": "unavailable", "database": "error"}, status_code=503)
+    return {"status": "ok", "database": "ok"}
+
+
+@router.get("/config", dependencies=[Depends(current_user)])
 def get_config() -> dict:
     """返回前端需要的默认配置。API Key 永不回传，只回报是否已配置。"""
     settings = get_settings()
@@ -24,13 +38,13 @@ def get_config() -> dict:
     embedding_error: str | None = None
     try:
         embedding_dimension = get_embedding_service().dimension
-    except Exception as exc:  # noqa: BLE001 - 模型不可用不应拖垮整个配置接口
-        embedding_error = str(exc)
+    except Exception:  # noqa: BLE001 - 模型不可用不应拖垮整个配置接口
+        embedding_error = "嵌入模型暂不可用，请联系管理员"
 
     try:
         collection = vectorstore.describe_collection()
-    except Exception as exc:  # noqa: BLE001
-        collection = {"error": str(exc)}
+    except Exception:  # noqa: BLE001
+        collection = {"error": "向量库暂不可用，请联系管理员"}
 
     return {
         "llm_configured": settings.llm_ready,

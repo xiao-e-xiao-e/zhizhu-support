@@ -1,130 +1,190 @@
-"""文档管理路由：上传、列表、分块预览、删除、检索调试。"""
-from __future__ import annotations
+"""文档异步入库、修订审阅与发布。"""
 
-import logging
 from pathlib import Path
+from urllib.parse import quote
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import Response
+from pydantic import BaseModel, ConfigDict, Field
+from starlette.concurrency import run_in_threadpool
 
-from ..schemas import (
-    ChunkHit,
-    ChunkOut,
-    DocumentOut,
-    SearchRequest,
-    StatsOut,
-    UploadResponse,
-    UploadResult,
-)
-from ..services import vectorstore
-from ..services.parser import parse_file
-
-logger = logging.getLogger(__name__)
+from ..business_schemas import KnowledgeScope
+from ..core.auth import current_user, require_admin, require_staff
+from ..core.config import get_settings
+from ..core.database import session_factory
+from ..models import User
+from ..schemas import SearchRequest
+from ..services import knowledge
+from ..services.catalog import validate_scope
+from ..services.parser import extract_text
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
 
-def _safe_name(raw: str | None) -> str:
-    """只保留文件名部分，防止路径穿越。"""
-    return Path(raw or "unnamed").name or "unnamed"
+class DocumentAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    revision: int = Field(ge=1)
+    revision_id: str | None = None
 
 
-@router.post("/upload", response_model=UploadResponse)
+class ScopeAction(KnowledgeScope):
+    revision: int = Field(ge=1)
+
+
+async def _read_upload(upload):
+    limit = get_settings().max_upload_mb * 1024 * 1024
+    content = await upload.read(limit + 1)
+    if len(content) > limit:
+        raise ValueError(f"单文件不能超过 {get_settings().max_upload_mb} MB")
+    return content
+
+
+@router.post("/upload", status_code=202)
 async def upload_documents(
     files: list[UploadFile] = File(...),
-    chunk_size: int = Form(500),
-    chunk_overlap: int = Form(100),
-) -> UploadResponse:
-    """上传并入库。单个文件失败不影响其他文件。"""
-    results: list[UploadResult] = []
-    total_chunks = 0
-    failed = 0
-
+    chunk_size: int = Form(500, ge=100, le=3000),
+    chunk_overlap: int = Form(100, ge=0, le=1000),
+    product_id: str | None = Form(None),
+    version_id: str | None = Form(None),
+    user: User = Depends(require_staff),
+):
+    if len(files) > 10 or chunk_overlap >= chunk_size:
+        raise HTTPException(422, "单次最多上传 10 个文件，且重叠必须小于块大小")
+    with session_factory()() as db:
+        validate_scope(db, product_id, version_id, user.id)
+    results = []
     for upload in files:
-        name = _safe_name(upload.filename)
         try:
-            content = await upload.read()
-            if not content:
-                raise ValueError("文件内容为空")
-
-            chunks = parse_file(
-                name,
+            content = await _read_upload(upload)
+            result = await run_in_threadpool(
+                knowledge.enqueue,
+                upload.filename or "unnamed.txt",
                 content,
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
+                user.id,
+                product_id,
+                version_id,
+                chunk_size,
+                chunk_overlap,
             )
-            if not chunks:
-                raise ValueError("未能从文件中提取到有效文本")
-
-            count = vectorstore.add_documents(name, chunks)
-            total_chunks += count
-            results.append(UploadResult(filename=name, chunks=count, ok=True))
-        except Exception as exc:  # noqa: BLE001 - 逐文件兜底，失败要回传给前端
-            logger.exception("解析入库失败: %s", name)
-            failed += 1
+            results.append({"filename": upload.filename, "chunks": 0, "ok": True, **result})
+        except (ValueError, HTTPException) as exc:
             results.append(
-                UploadResult(filename=name, chunks=0, ok=False, error=str(exc))
+                {
+                    "filename": upload.filename,
+                    "chunks": 0,
+                    "ok": False,
+                    "error": str(exc) if isinstance(exc, ValueError) else exc.detail,
+                }
             )
+        finally:
+            await upload.close()
+    return {"results": results, "total_chunks": 0, "failed": sum(not r["ok"] for r in results)}
 
-    return UploadResponse(results=results, total_chunks=total_chunks, failed=failed)
 
-
-@router.post("/preview")
-async def preview_document(
-    file: UploadFile = File(...),
-    limit: int = Form(2000),
-) -> dict:
-    """只解析预览，不写入向量库。"""
-    from ..services.parser import extract_text
-
-    name = _safe_name(file.filename)
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="文件内容为空")
-
+@router.post("/preview", dependencies=[Depends(require_staff)])
+async def preview_document(file: UploadFile = File(...), limit: int = Form(2000, ge=1, le=10000)):
     try:
-        text = extract_text(name, content)
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=400, detail=f"解析失败: {exc}") from exc
+        content = await _read_upload(file)
+        if not content:
+            raise ValueError("文件内容为空")
+        text = await run_in_threadpool(extract_text, Path(file.filename or "unnamed").name, content)
+        return {
+            "filename": file.filename,
+            "characters": len(text),
+            "truncated": len(text) > limit,
+            "text": text[:limit],
+        }
+    except Exception as exc:
+        raise HTTPException(400, "文件解析失败，请检查大小与格式") from exc
+    finally:
+        await file.close()
 
+
+@router.get("")
+def list_documents(user: User = Depends(current_user)):
+    return knowledge.documents(user.role in {"staff", "admin"}, user.id)
+
+
+@router.get("/stats")
+def stats(user: User = Depends(current_user)):
+    docs = knowledge.documents(user_id=user.id)
     return {
-        "filename": name,
-        "characters": len(text),
-        "truncated": len(text) > limit,
-        "text": text[:limit],
+        "total_chunks": sum(d["chunks"] for d in docs),
+        "sources": len(docs),
+        "space": "cosine",
+        "embedding_model": get_settings().embedding_model,
     }
 
 
-@router.get("", response_model=list[DocumentOut])
-async def list_documents() -> list[DocumentOut]:
-    return [DocumentOut(**row) for row in vectorstore.list_documents()]
+@router.get("/jobs")
+def jobs(user: User = Depends(require_staff)):
+    return knowledge.queue_status(user.id)
 
 
-@router.get("/stats", response_model=StatsOut)
-async def get_stats() -> StatsOut:
-    return StatsOut(**vectorstore.get_stats())
+@router.post("/jobs/{job_id}/retry")
+def retry(job_id: str, user: User = Depends(require_staff)):
+    return knowledge.retry_job(job_id, user.id)
 
 
-@router.post("/search", response_model=list[ChunkHit])
-async def search_documents(payload: SearchRequest) -> list[ChunkHit]:
-    hits = vectorstore.search(
+@router.post("/search")
+def search(payload: SearchRequest, user: User = Depends(current_user)):
+    with session_factory()() as db:
+        validate_scope(db, payload.product_id, payload.version_id, user.id)
+    return knowledge.search(
         payload.query,
-        top_k=payload.top_k,
-        similarity_threshold=payload.similarity_threshold,
+        payload.top_k,
+        payload.similarity_threshold,
+        payload.product_id,
+        payload.version_id,
+        user.id,
     )
-    return [ChunkHit(**hit) for hit in hits]
 
 
-@router.get("/{filename}/chunks", response_model=list[ChunkOut])
-async def get_document_chunks(filename: str) -> list[ChunkOut]:
-    rows = vectorstore.get_document_chunks(_safe_name(filename))
-    if not rows:
-        raise HTTPException(status_code=404, detail=f"未找到文档: {filename}")
-    return [ChunkOut(**row) for row in rows]
+@router.get("/{key}/revisions")
+def revisions(key: str, user: User = Depends(require_staff)):
+    knowledge.check_access(key, user.id)
+    return knowledge.history(key)
 
 
-@router.delete("/{filename}")
-async def delete_document(filename: str) -> dict:
-    deleted = vectorstore.delete_document(_safe_name(filename))
-    if deleted == 0:
-        raise HTTPException(status_code=404, detail=f"未找到文档: {filename}")
-    return {"deleted_chunks": deleted, "filename": filename}
+@router.get("/{key}/revisions/{revision_id}/original")
+def original(key: str, revision_id: str, user: User = Depends(require_staff)):
+    knowledge.check_access(key, user.id)
+    try:
+        name, content = knowledge.original(key, revision_id)
+    except ValueError as exc:
+        raise HTTPException(409, "原始文件缺失或校验失败，请联系管理员") from exc
+    return Response(
+        content,
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": "attachment; filename*=UTF-8''" + quote(name),
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.post("/{key}/{action}")
+def action(key: str, action: str, payload: DocumentAction, user: User = Depends(require_admin)):
+    knowledge.check_access(key, user.id)
+    if action not in {"publish", "withdraw", "archive", "restore"}:
+        raise HTTPException(404, "操作不存在")
+    return knowledge.change(key, action, user.id, payload.revision, payload.revision_id)
+
+
+@router.patch("/{key}/scope")
+def scope(key: str, payload: ScopeAction, user: User = Depends(require_staff)):
+    knowledge.check_access(key, user.id)
+    return knowledge.change(
+        key, "scope", user.id, payload.revision, product_id=payload.product_id, version_id=payload.version_id
+    )
+
+
+@router.get("/{key}/chunks")
+def chunks(key: str, revision_id: str | None = None, user: User = Depends(current_user)):
+    return knowledge.chunks(key, user.role in {"staff", "admin"}, revision_id, user.id)
+
+
+@router.delete("/{key}")
+def archive(key: str, revision: int = Query(ge=1), user: User = Depends(require_admin)):
+    knowledge.check_access(key, user.id)
+    return knowledge.change(key, "archive", user.id, revision)
