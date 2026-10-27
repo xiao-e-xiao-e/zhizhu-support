@@ -1,0 +1,159 @@
+{
+  "passed": true,
+  "generated": {
+    "id": "58f32684-ce24-49e8-ab41-915c4fa4d390",
+    "ticket_id": "9567cce3-50bb-4b20-9e92-02158220a539",
+    "question": "遇到 E401 登录会话过期提示应如何处理？",
+    "answer": "退出当前登录并重新登录。该提示表示原会话已过期。",
+    "state": "draft",
+    "revision": 3,
+    "product_id": "b3c36069-aedc-4fd9-8028-7773a94197ba",
+    "version_id": "150514bc-7f48-493e-9ab3-eed7b45d0cba",
+    "author_id": "053ddc4e-d900-444e-9768-f37405ee221c",
+    "reviewer_id": null,
+    "review_note": "",
+    "run_id": "d561cdc6-b954-4a92-abb7-99f8797d9353",
+    "document_id": null,
+    "revision_id": null,
+    "knowledge_state": null,
+    "job": null,
+    "created_at": "2026-10-26T03:17:10.480762+00:00",
+    "updated_at": "2026-10-26T03:17:12.098243+00:00",
+    "source_snapshot": {
+      "title": "E401 登录会话过期",
+      "problem": "E401 登录会话过期",
+      "solution": "退出并重新登录，原会话已过期。",
+      "product_id": "b3c36069-aedc-4fd9-8028-7773a94197ba",
+      "version_id": "150514bc-7f48-493e-9ab3-eed7b45d0cba"
+    },
+    "events": [
+      {
+        "action": "generated",
+        "note": "",
+        "actor_id": "053ddc4e-d900-444e-9768-f37405ee221c",
+        "created_at": "2026-10-26T03:17:12.099482+00:00"
+      },
+      {
+        "action": "created",
+        "note": "模型待生成",
+        "actor_id": "053ddc4e-d900-444e-9768-f37405ee221c",
+        "created_at": "2026-10-26T03:17:10.484004+00:00"
+      }
+    ]
+  },
+  "published": {
+    "id": "58f32684-ce24-49e8-ab41-915c4fa4d390",
+    "ticket_id": "9567cce3-50bb-4b20-9e92-02158220a539",
+    "question": "遇到 E401 登录会话过期提示应如何处理？",
+    "answer": "退出当前登录并重新登录。该提示表示原会话已过期。",
+    "state": "published",
+    "revision": 6,
+    "product_id": "b3c36069-aedc-4fd9-8028-7773a94197ba",
+    "version_id": "150514bc-7f48-493e-9ab3-eed7b45d0cba",
+    "author_id": "053ddc4e-d900-444e-9768-f37405ee221c",
+    "reviewer_id": "3347b37b-041f-4c06-a6a8-39b854c62c20",
+    "review_note": "",
+    "run_id": "d561cdc6-b954-4a92-abb7-99f8797d9353",
+    "document_id": "db603660-a0e8-4a6c-a7bc-53e2d0371556",
+    "revision_id": "82304c29-27c0-4334-b7c2-b683e0a14de6",
+    "knowledge_state": "published",
+    "job": {
+      "id": "bda8b56a-92ec-4f58-9f69-ca9436da020b",
+      "revision_id": "82304c29-27c0-4334-b7c2-b683e0a14de6",
+      "state": "succeeded",
+      "phase": "入库完成，待发布",
+      "progress": 100,
+      "attempts": 1,
+      "max_attempts": 3,
+      "error": null,
+      "available_at": "2026-10-26T03:17:12.115598+00:00",
+      "updated_at": "2026-10-26T03:17:12.158986+00:00"
+    },
+    "created_at": "2026-10-26T03:17:10.480762+00:00",
+    "updated_at": "2026-10-26T03:17:12.168929+00:00",
+    "source_snapshot": {
+      "title": "E401 登录会话过期",
+      "problem": "E401 登录会话过期",
+      "solution": "退出并重新登录，原会话已过期。",
+      "product_id": "b3c36069-aedc-4fd9-8028-7773a94197ba",
+      "version_id": "150514bc-7f48-493e-9ab3-eed7b45d0cba"
+    },
+    "events": [
+      {
+        "action": "publish",
+        "note": "",
+        "actor_id": "3347b37b-041f-4c06-a6a8-39b854c62c20",
+        "created_at": "2026-10-26T03:17:12.168929+00:00"
+      },
+      {
+        "action": "approve",
+        "note": "",
+        "actor_id": "3347b37b-041f-4c06-a6a8-39b854c62c20",
+        "created_at": "2026-10-26T03:17:12.116591+00:00"
+      },
+      {
+        "action": "submit",
+        "note": "",
+        "actor_id": "053ddc4e-d900-444e-9768-f37405ee221c",
+        "created_at": "2026-10-26T03:17:12.107070+00:00"
+      },
+      {
+        "action": "generated",
+        "note": "",
+        "actor_id": "053ddc4e-d900-444e-9768-f37405ee221c",
+        "created_at": "2026-10-26T03:17:12.099482+00:00"
+      },
+      {
+        "action": "created",
+        "note": "模型待生成",
+        "actor_id": "053ddc4e-d900-444e-9768-f37405ee221c",
+        "created_at": "2026-10-26T03:17:10.484004+00:00"
+      }
+    ]
+  },
+  "trace": {
+    "id": "d561cdc6-b954-4a92-abb7-99f8797d9353",
+    "kind": "faq",
+    "status": "completed",
+    "question": "从已解决工单生成 FAQ 草稿",
+    "product_id": "b3c36069-aedc-4fd9-8028-7773a94197ba",
+    "version_id": "150514bc-7f48-493e-9ab3-eed7b45d0cba",
+    "parent_id": null,
+    "model": "deepseek-v4-flash",
+    "result": {
+      "faq_id": "58f32684-ce24-49e8-ab41-915c4fa4d390",
+      "usage": {
+        "total_tokens": 292
+      },
+      "elapsed_ms": 1600
+    },
+    "ticket_id": null,
+    "error_code": null,
+    "error": null,
+    "revision": 4,
+    "expires_at": "2026-10-26T03:18:10.489636+00:00",
+    "created_at": "2026-10-26T03:17:10.481755+00:00",
+    "updated_at": "2026-10-26T03:17:12.098243+00:00",
+    "steps": [
+      {
+        "id": "763c4c7e-9d37-428f-bdb2-fc120d4a520e",
+        "number": 1,
+        "name": "generate_faq",
+        "status": "succeeded",
+        "input": {
+          "source": "已解决工单快照"
+        },
+        "output": {
+          "question": "遇到 E401 登录会话过期提示应如何处理？",
+          "answer": "退出当前登录并重新登录。该提示表示原会话已过期。",
+          "total_tokens": 292
+        },
+        "error": null,
+        "elapsed_ms": 1593,
+        "created_at": "2026-10-26T03:17:10.495171+00:00"
+      }
+    ]
+  },
+  "invisible_before_publish": true,
+  "visible_after_publish": true
+}
