@@ -1,5 +1,6 @@
 # 敏感信息
 .env
+.env.*.local
 
 # ChromaDB 数据库
 chroma_db/
@@ -9,6 +10,11 @@ __pycache__/
 *.pyc
 *.pyo
 .venv/
+.venv-dev/
+.pytest_cache/
+.ruff_cache/
+backend/storage/
+*.egg-info/
 venv/
 
 # IDE
