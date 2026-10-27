@@ -285,3 +285,17 @@ def test_production_configuration_guards(client):
     settings = Settings(_env_file=None, app_env="production", cookie_secure=True,
                         database_url="postgresql+psycopg://support:example@localhost/support", cors_origins="https://example.com")
     assert settings.cookie_secure
+
+
+def test_blank_test_database_url_uses_isolated_sqlite(monkeypatch, request, tmp_path):
+    from pathlib import Path
+
+    from sqlalchemy.engine import make_url
+
+    monkeypatch.setenv("TEST_DATABASE_URL", "")
+    request.getfixturevalue("app")
+    from app.core.config import get_settings
+
+    url = make_url(get_settings().database_url)
+    assert url.drivername == "sqlite"
+    assert Path(url.database).resolve() == (tmp_path / "test.db").resolve()

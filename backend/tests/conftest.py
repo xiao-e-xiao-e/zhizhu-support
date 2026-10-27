@@ -9,11 +9,11 @@ from sqlalchemy.engine import make_url
 
 @pytest.fixture
 def app(tmp_path, monkeypatch):
-    test_url = os.getenv("TEST_DATABASE_URL")
+    test_url = os.getenv("TEST_DATABASE_URL") or None
     if test_url and not (make_url(test_url).database or "").endswith("_test"):
         pytest.fail("TEST_DATABASE_URL 必须指向名称以 _test 结尾的专用测试库")
     monkeypatch.setenv(
-        "DATABASE_URL", os.getenv("TEST_DATABASE_URL", f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
+        "DATABASE_URL", test_url or f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
     )
     monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setenv("COOKIE_SECURE", "false")

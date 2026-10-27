@@ -21,7 +21,8 @@
 | 9 | [407dad6](https://github.com/xiao-e-xiao-e/zhizhu-support/commit/407dad6f4540a37f654050d5b693189f4c75d216) | test: 补齐业务隔离、流式输出回归与模型质量评估 |
 | 10 | [0b13522](https://github.com/xiao-e-xiao-e/zhizhu-support/commit/0b1352207a9cb2d7ffd1e6eeada778d012f5b347) | chore(deploy): 添加容器、后台 worker 与部署初始化配置 |
 | 11 | [283af83](https://github.com/xiao-e-xiao-e/zhizhu-support/commit/283af838bf965edfdf395d1ea1191592527b0307) | fix(deps): 修复四项高危依赖公告并更新前端包标识 |
-| 12 | 本说明所在提交 | 品牌命名、部署模板、项目文档与 CI |
+| 12 | [baa3198](https://github.com/xiao-e-xiao-e/zhizhu-support/commit/baa3198dd96219f1af0cd9eb92d42b0358e0782e) | 品牌命名、部署模板、项目文档与 CI |
+| 13 | 本说明所在提交 | 空测试数据库配置回退与 CI 矩阵独立运行 |
 
 这些批次描述一个完整版本的组成层次；安装与部署请使用 `dev` 的完整最新版本。
 
