@@ -1,438 +1,88 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useRoute } from 'vue-router'
-import {
-  ChatDotRound,
-  Clock,
-  Files,
-  Refresh,
-} from '@element-plus/icons-vue'
-
-import { useLibraryStore } from '@/stores/library'
+import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Files, Tickets, ChatLineSquare, Collection, Clock, Setting, SwitchButton, Fold, Expand } from '@element-plus/icons-vue'
+import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
-
-const route = useRoute()
-const settings = useSettingsStore()
-const library = useLibraryStore()
-
-const navItems = [
-  { name: 'chat', path: '/chat', label: '智能问答', desc: '检索增强生成', icon: ChatDotRound },
-  { name: 'documents', path: '/documents', label: '文档管理', desc: '上传与入库', icon: Files },
-  { name: 'history', path: '/history', label: '对话历史', desc: '保存与导出', icon: Clock },
+import { useChatStore } from '@/stores/chat'
+import { useConversationsStore, conversationTitle } from '@/stores/conversations'
+import { useWorkspaceStore } from '@/stores/workspace'
+defineProps<{ mobile?: boolean }>()
+const emit = defineEmits<{ navigate: [] }>()
+const auth = useAuthStore(), chat = useChatStore(), settings = useSettingsStore()
+const recent = useConversationsStore(), workspace = useWorkspaceStore()
+const route = useRoute(), router = useRouter()
+const nav = computed(() => [
+  { path: '/assistant', label: '智能助手', icon: ChatLineSquare },
+  { path: '/knowledge', label: '产品资料', icon: Files },
+  { path: '/tickets', label: auth.isStaff ? '工单工作台' : '我的工单', icon: Tickets },
+  { path: '/feedback', label: auth.isStaff ? '回答反馈' : '我的反馈', icon: ChatLineSquare },
+])
+const management = [
+  { path: '/products', label: '产品与版本', icon: Collection },
+  { path: '/documents', label: '文档管理', icon: Files },
+  { path: '/faqs', label: 'FAQ 知识运营', icon: Collection },
 ]
-
-const advancedOpen = ref<string[]>([])
-
-const embeddingModel = computed(() => settings.config?.embedding_model ?? '加载中…')
-const embeddingDimension = computed(() => settings.config?.embedding_dimension)
-const collectionSpace = computed(() => library.stats.space || '—')
-const llmHint = computed(() =>
-  settings.llmReady ? '已配置，可直接提问' : '未配置，请填写 API Key',
-)
+async function switchConversation(name = '') {
+  if (chat.streaming) {
+    try { await ElMessageBox.confirm('当前回复正在进行，停止后切换对话？', '切换对话', { confirmButtonText: '停止并切换', cancelButtonText: '继续当前对话' }) }
+    catch { return }
+    await chat.stop()
+  }
+  workspace.close()
+  if (!name) chat.clear()
+  await router.push({ path: '/assistant', query: name ? { session: name } : {} })
+  emit('navigate')
+}
+async function logout() {
+  try { await auth.logout(); settings.config = null; await router.replace('/login') }
+  catch (e) { ElMessage.error((e as Error).message) }
+}
 </script>
 
 <template>
-  <aside class="sidebar">
+  <aside class="sidebar" :class="{ 'sidebar--collapsed': workspace.collapsed && !mobile }">
     <div class="sidebar__brand">
-      <div class="brand-mark">知</div>
-      <div class="brand-text">
-        <div class="brand-title">知识库</div>
-        <div class="brand-sub">RAG 智能问答</div>
-      </div>
+      <router-link to="/assistant" class="brand-mark" aria-label="智能客服工作台">知</router-link>
+      <span class="brand-title sidebar-label">智能客服工作台</span>
+      <button v-if="!mobile" class="icon-button collapse-button" :aria-label="workspace.collapsed ? '展开侧栏' : '收起侧栏'" @click="workspace.collapsed = !workspace.collapsed"><el-icon><Expand v-if="workspace.collapsed" /><Fold v-else /></el-icon></button>
     </div>
-
-    <nav class="sidebar__nav">
-      <router-link
-        v-for="item in navItems"
-        :key="item.name"
-        :to="item.path"
-        class="nav-item"
-        :class="{ 'nav-item--active': route.name === item.name }"
-      >
-        <el-icon class="nav-item__icon"><component :is="item.icon" /></el-icon>
-        <span class="nav-item__body">
-          <span class="nav-item__label">{{ item.label }}</span>
-          <span class="nav-item__desc">{{ item.desc }}</span>
-        </span>
-      </router-link>
-    </nav>
-
+    <button class="new-chat" title="新对话" @click="switchConversation()"><el-icon><Plus /></el-icon><span class="sidebar-label">新对话</span></button>
     <div class="sidebar__scroll">
-      <section class="panel">
-        <div class="panel__head">
-          <span class="section-label">知识库状态</span>
-          <el-button
-            link
-            size="small"
-            :loading="library.loading"
-            @click="library.refresh()"
-          >
-            <el-icon><Refresh /></el-icon>
-          </el-button>
-        </div>
-
-        <div class="stat-grid">
-          <div class="stat">
-            <div class="stat__value">{{ library.stats.total_chunks }}</div>
-            <div class="stat__label">文档块</div>
-          </div>
-          <div class="stat">
-            <div class="stat__value">{{ library.stats.sources }}</div>
-            <div class="stat__label">文件</div>
-          </div>
-        </div>
-
-        <div class="meta-line">
-          <span>向量空间</span>
-          <code>{{ collectionSpace }}</code>
-        </div>
-        <div class="meta-line">
-          <span>嵌入模型</span>
-          <code :title="embeddingModel">{{ embeddingModel }}</code>
-        </div>
-        <div v-if="embeddingDimension" class="meta-line">
-          <span>向量维度</span>
-          <code>{{ embeddingDimension }}</code>
-        </div>
+      <nav class="sidebar__nav" aria-label="工作台导航">
+        <router-link v-for="item in nav" :key="item.path" :to="item.path" :title="item.label" class="nav-item" :class="{ active: route.path.startsWith(item.path) }" @click="emit('navigate')"><el-icon><component :is="item.icon" /></el-icon><span class="sidebar-label">{{ item.label }}</span></router-link>
+      </nav>
+      <nav v-if="auth.isStaff" class="sidebar__nav management" aria-label="知识运营">
+        <p class="section-title sidebar-label">知识运营</p>
+        <router-link v-for="item in management" :key="item.path" :to="item.path" :title="item.label" class="nav-item" :class="{ active: route.path.startsWith(item.path) }" @click="emit('navigate')"><el-icon><component :is="item.icon" /></el-icon><span class="sidebar-label">{{ item.label }}</span></router-link>
+      </nav>
+      <section class="recent sidebar-label" aria-label="最近对话">
+        <div class="recent__head"><span class="section-title">最近对话</span><button class="icon-button" aria-label="刷新最近对话" :disabled="recent.loading" @click="recent.refresh()">↻</button></div>
+        <p v-if="recent.error" class="recent__empty">加载失败 <button @click="recent.refresh()">重试</button></p>
+        <p v-else-if="!recent.items.length" class="recent__empty">{{ recent.loading ? '正在加载…' : '开始对话后，记录会保存在这里' }}</p>
+        <button v-for="item in recent.items.slice(0, 8)" :key="item.name" class="recent-item" :class="{ active: route.path === '/assistant' && chat.sessionName === item.name }" :title="conversationTitle(item.name)" @click="switchConversation(item.name)">{{ conversationTitle(item.name) }}</button>
       </section>
-
-      <section class="panel">
-        <div class="panel__head">
-          <span class="section-label">检索与生成</span>
-          <el-button link size="small" @click="settings.resetRag()">重置</el-button>
-        </div>
-
-        <div class="field">
-          <div class="field__row">
-            <span>检索数量 Top-K</span>
-            <b>{{ settings.rag.topK }}</b>
-          </div>
-          <el-slider v-model="settings.rag.topK" :min="1" :max="20" :show-tooltip="false" />
-        </div>
-
-        <div class="field">
-          <div class="field__row">
-            <span>相似度阈值</span>
-            <b>{{ settings.rag.similarityThreshold.toFixed(2) }}</b>
-          </div>
-          <el-slider
-            v-model="settings.rag.similarityThreshold"
-            :min="0"
-            :max="1"
-            :step="0.05"
-            :show-tooltip="false"
-          />
-          <p class="field__hint">低于该值的片段会被丢弃，0 表示不过滤</p>
-        </div>
-
-        <div class="field">
-          <div class="field__row">
-            <span>生成温度</span>
-            <b>{{ settings.rag.temperature.toFixed(2) }}</b>
-          </div>
-          <el-slider
-            v-model="settings.rag.temperature"
-            :min="0"
-            :max="1.5"
-            :step="0.05"
-            :show-tooltip="false"
-          />
-          <p class="field__hint">越低越保守严谨，越高越有创造性</p>
-        </div>
-      </section>
-
-      <el-collapse v-model="advancedOpen" class="sidebar__collapse">
-        <el-collapse-item name="chunk">
-          <template #title>
-            <span class="section-label">分块参数</span>
-          </template>
-
-          <div class="field">
-            <div class="field__row">
-              <span>块大小（字符）</span>
-              <b>{{ settings.rag.chunkSize }}</b>
-            </div>
-            <el-input-number
-              v-model="settings.rag.chunkSize"
-              :min="100"
-              :max="3000"
-              :step="50"
-              size="small"
-              controls-position="right"
-              style="width: 100%"
-            />
-          </div>
-
-          <div class="field">
-            <div class="field__row">
-              <span>重叠（字符）</span>
-              <b>{{ settings.rag.chunkOverlap }}</b>
-            </div>
-            <el-input-number
-              v-model="settings.rag.chunkOverlap"
-              :min="0"
-              :max="500"
-              :step="20"
-              size="small"
-              controls-position="right"
-              style="width: 100%"
-            />
-            <p class="field__hint">仅在重新上传文档时生效</p>
-          </div>
-        </el-collapse-item>
-
-        <el-collapse-item name="llm">
-          <template #title>
-            <span class="section-label">模型配置</span>
-          </template>
-
-          <div class="field">
-            <div class="field__row"><span>API Key</span></div>
-            <el-input
-              v-model="settings.llm.apiKey"
-              type="password"
-              size="small"
-              show-password
-              placeholder="留空则使用后端 .env"
-            />
-            <p class="field__hint">{{ llmHint }}，仅保存在本机浏览器</p>
-          </div>
-
-          <div class="field">
-            <div class="field__row"><span>API Base URL</span></div>
-            <el-input
-              v-model="settings.llm.apiBaseUrl"
-              size="small"
-              placeholder="https://api.deepseek.com"
-            />
-          </div>
-
-          <div class="field">
-            <div class="field__row"><span>对话模型</span></div>
-            <el-input
-              v-model="settings.llm.chatModel"
-              size="small"
-              placeholder="deepseek-v4-flash"
-            />
-          </div>
-        </el-collapse-item>
-      </el-collapse>
+      <router-link to="/history" class="nav-item history-link" title="全部对话" @click="emit('navigate')"><el-icon><Clock /></el-icon><span class="sidebar-label">全部对话</span></router-link>
+    </div>
+    <div class="sidebar__bottom">
+      <button class="nav-item" title="助手设置" @click="workspace.openSettings(); emit('navigate')"><el-icon><Setting /></el-icon><span class="sidebar-label">助手设置</span></button>
+      <div class="account-row">
+        <router-link to="/account" class="account-link" title="账号设置" @click="emit('navigate')"><span class="account-avatar">{{ auth.user?.username.slice(0, 1).toUpperCase() }}</span><span class="sidebar-label account-name">{{ auth.user?.username }}<small>{{ auth.isStaff ? '团队工作空间' : '个人工作空间' }}</small></span></router-link>
+        <button class="icon-button sidebar-label" aria-label="退出登录" @click="logout"><el-icon><SwitchButton /></el-icon></button>
+      </div>
     </div>
   </aside>
 </template>
 
 <style scoped>
-.sidebar {
-  display: flex;
-  flex-direction: column;
-  width: var(--sidebar-width);
-  flex-shrink: 0;
-  height: 100vh;
-  background: var(--bg-surface);
-  border-right: 1px solid var(--border-subtle);
-}
-
-.sidebar__brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 18px 18px 14px;
-}
-
-.brand-mark {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  flex-shrink: 0;
-  border-radius: 9px;
-  background: linear-gradient(135deg, var(--brand-500), var(--brand-700));
-  color: #fff;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.brand-title {
-  font-size: 14.5px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.brand-sub {
-  font-size: 11.5px;
-  color: var(--text-tertiary);
-}
-
-.sidebar__nav {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 0 10px 12px;
-}
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  text-decoration: none;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.nav-item:hover {
-  background: var(--bg-subtle);
-  color: var(--text-primary);
-  text-decoration: none;
-}
-
-.nav-item--active {
-  background: var(--brand-50);
-  color: var(--brand-700);
-}
-
-.nav-item__icon {
-  font-size: 16px;
-  flex-shrink: 0;
-}
-
-.nav-item__body {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.3;
-}
-
-.nav-item__label {
-  font-size: 13.5px;
-  font-weight: 500;
-}
-
-.nav-item__desc {
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
-.nav-item--active .nav-item__desc {
-  color: var(--brand-500);
-}
-
-.sidebar__scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 10px 20px;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.panel {
-  padding: 14px 8px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.panel__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.stat-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.stat {
-  padding: 8px 10px;
-  background: var(--bg-subtle);
-  border-radius: var(--radius-sm);
-}
-
-.stat__value {
-  font-size: 18px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.2;
-}
-
-.stat__label {
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
-.meta-line {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 2px 0;
-  font-size: 11.5px;
-  color: var(--text-secondary);
-}
-
-.meta-line code {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--text-tertiary);
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.field {
-  margin-bottom: 14px;
-}
-
-.field:last-child {
-  margin-bottom: 0;
-}
-
-.field__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 2px;
-  font-size: 12.5px;
-  color: var(--text-secondary);
-}
-
-.field__row b {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.field__hint {
-  margin-top: 2px;
-  font-size: 11px;
-  line-height: 1.5;
-  color: var(--text-tertiary);
-}
-
-.sidebar__collapse {
-  border: none;
-}
-
-.sidebar__collapse :deep(.el-collapse-item__header) {
-  height: 44px;
-  padding: 0 8px;
-  border-bottom: none;
-  background: transparent;
-}
-
-.sidebar__collapse :deep(.el-collapse-item__wrap) {
-  border-bottom: none;
-  background: transparent;
-}
-
-.sidebar__collapse :deep(.el-collapse-item__content) {
-  padding: 0 8px 12px;
-}
-
-.sidebar__collapse :deep(.el-collapse) {
-  border: none;
-}
+.sidebar { display: flex; flex-direction: column; width: 244px; flex-shrink: 0; height: 100%; background: #f7f7fa; border-right: 1px solid #eeedf3; padding: 0 12px; transition: width .18s; }
+.sidebar__brand { display: flex; align-items: center; gap: 9px; height: 76px; flex-shrink: 0; padding: 0 6px; }
+.brand-mark { display: grid; place-items: center; width: 30px; height: 32px; border-radius: 10px; background: var(--brand-600); color: white; font-size: 17px; font-weight: 600; flex-shrink: 0; text-decoration: none; }
+.brand-title { font-size: 14px; font-weight: 600; white-space: nowrap; }.collapse-button { margin-left: auto; }
+.icon-button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: #888595; cursor: pointer; font-size: 17px; flex-shrink: 0; }.icon-button:hover { background: #ebeaf1; color: var(--text-primary); }
+.new-chat { display: flex; align-items: center; gap: 12px; min-height: 42px; padding: 0 14px; border: 1px solid #dcd6f7; border-radius: 11px; background: #efeafa; color: #6250bf; font: 500 14px var(--font-sans); cursor: pointer; margin-bottom: 20px; flex-shrink: 0; }.new-chat:hover { background: #e6dff9; }
+.sidebar__scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }.sidebar__nav { display: grid; gap: 3px; }.nav-item { display: flex; width: 100%; align-items: center; gap: 12px; padding: 10px 13px; border: 0; border-radius: 9px; font: 14px var(--font-sans); color: #676473; background: transparent; cursor: pointer; white-space: nowrap; text-decoration: none; text-align: left; }.nav-item .el-icon { font-size: 17px; flex-shrink: 0; }.nav-item:hover,.recent-item:hover { background: #eeedf3; }.nav-item.active { background: #eeebf8; color: #6750c5; font-weight: 600; }
+.management { margin-top: 22px; }.section-title { font-size: 11px; font-weight: 500; color: #817a8d; letter-spacing: .06em; }.management .section-title { padding: 0 13px 5px; }.recent { margin-top: 30px; }.recent__head { display: flex; align-items: center; justify-content: space-between; padding: 0 8px 8px 13px; }.recent-item { display: block; width: 100%; background: none; border: 0; padding: 9px 13px; border-radius: 8px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #6f6c7b; font: 13px var(--font-sans); cursor: pointer; }.recent-item.active { background: #eeebf8; color: #6750c5; }.recent__empty { font-size: 12px; color: #817a8d; padding: 8px 13px; }.recent__empty button { border: 0; color: var(--brand-600); background: none; cursor: pointer; }.history-link { margin-top: 10px; font-size: 12px; }.sidebar__bottom { padding: 10px 0 16px; margin-top: 10px; border-top: 1px solid #e9e7ef; }.account-row { display: flex; align-items: center; padding: 10px 7px 0; gap: 5px; }.account-link { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 1; text-decoration: none; }.account-avatar { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%; background: #e9e5f4; color: #70618e; font-weight: 600; }.account-name { font-size: 12px; color: #565160; overflow: hidden; text-overflow: ellipsis; }.account-name small { display: block; font-size: 10px; color: #9c96a6; }
+.sidebar--collapsed { width: 72px; padding: 0 10px; }.sidebar--collapsed .sidebar-label { display: none; }.sidebar--collapsed .sidebar__brand { height: 104px; flex-direction: column; padding: 18px 0 10px; gap: 8px; }.sidebar--collapsed .collapse-button { margin: 0; }.sidebar--collapsed .new-chat,.sidebar--collapsed .nav-item { justify-content: center; padding-left: 0; padding-right: 0; }.sidebar--collapsed .account-row { padding: 10px 0 0; justify-content: center; }.sidebar--collapsed .account-link { justify-content: center; }.sidebar--collapsed .management { margin-top: 14px; }
 </style>

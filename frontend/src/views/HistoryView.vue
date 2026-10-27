@@ -6,6 +6,7 @@ import { Clock, Delete, Download, FolderOpened, Refresh } from '@element-plus/ic
 
 import * as api from '@/api'
 import { useChatStore } from '@/stores/chat'
+import { useConversationsStore } from '@/stores/conversations'
 import type { SessionSummary } from '@/types'
 
 const router = useRouter()
@@ -30,9 +31,9 @@ onMounted(refresh)
 async function loadSession(name: string) {
   try {
     const detail = await api.getSession(name)
-    chat.loadSession(name, detail.messages)
+    chat.loadSession(name, detail.messages, { product_id: detail.product_id ?? null, version_id: detail.version_id ?? null })
     ElMessage.success(`已加载「${name}」`)
-    router.push('/chat')
+    router.push({path: '/assistant', query: {session: name}})
   } catch (e) {
     ElMessage.error((e as Error).message)
   }
@@ -40,7 +41,7 @@ async function loadSession(name: string) {
 
 async function removeSession(name: string) {
   try {
-    await ElMessageBox.confirm(`删除后无法恢复，确定删除会话「${name}」吗？`, '删除会话', {
+    await ElMessageBox.confirm(`确定删除会话「${name}」吗？历史记录无法恢复，已提交到工单或反馈中的对话副本会保留。`, '删除会话', {
       type: 'warning',
       confirmButtonText: '删除',
       cancelButtonText: '取消',
@@ -50,6 +51,8 @@ async function removeSession(name: string) {
   }
   try {
     await api.deleteSession(name)
+    if (chat.sessionName === name) chat.clear()
+    void useConversationsStore().refresh()
     ElMessage.success('已删除')
     await refresh()
   } catch (e) {
@@ -76,7 +79,7 @@ function formatTime(value: string): string {
         <div>
           <h1 class="page-title">对话历史</h1>
           <p class="page-desc">
-            保存过的会话都存在项目根目录的 chat_history.json，可随时载入继续追问或导出为 Markdown
+            查看和继续自己的历史会话，也可以导出为 Markdown
           </p>
         </div>
         <el-button :loading="loading" @click="refresh">
@@ -103,7 +106,7 @@ function formatTime(value: string): string {
 
           <div class="session__actions">
             <el-button size="small" type="primary" plain @click="loadSession(item.name)">
-              载入到问答
+              继续对话
             </el-button>
             <el-button size="small" @click="exportSession(item.name)">
               <el-icon><Download /></el-icon>
@@ -120,9 +123,9 @@ function formatTime(value: string): string {
         <el-icon :size="26"><FolderOpened /></el-icon>
         <div class="empty-state__title">还没有保存过对话</div>
         <div class="empty-state__hint">
-          到「智能问答」里提问，在顶部填写会话名称并点击保存，之后就能在这里找到它
+          在「智能助手」中开始对话，记录会自动保存在这里
         </div>
-        <el-button type="primary" plain style="margin-top: 8px" @click="router.push('/chat')">
+        <el-button type="primary" plain style="margin-top: 8px" @click="router.push('/assistant')">
           去提问
         </el-button>
       </div>

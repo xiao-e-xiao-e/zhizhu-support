@@ -3,9 +3,18 @@ import { fileURLToPath, URL } from 'node:url'
 import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vite'
 
+const releaseId = Date.now().toString(36)
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), {
+    name: 'release-marker',
+    transformIndexHtml: () => [{
+      tag: 'meta',
+      attrs: { name: 'app-release', content: releaseId },
+      injectTo: 'head',
+    }],
+  }],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

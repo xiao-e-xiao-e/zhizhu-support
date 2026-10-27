@@ -57,3 +57,29 @@ const md = new MarkdownIt({
 export function renderMarkdown(text: string): string {
   return md.render(text ?? '')
 }
+
+// Only citation text backed by this answer's actual retrieval results is interactive.
+// Code tokens and Markdown links keep their normal renderer.
+const defaultLinkOpen = md.renderer.rules.link_open
+const defaultLinkClose = md.renderer.rules.link_close
+md.renderer.rules.link_open = (tokens, index, options, env, self) => {
+  if (env) env.linkDepth = Number(env.linkDepth || 0) + 1
+  return defaultLinkOpen ? defaultLinkOpen(tokens, index, options, env, self) : self.renderToken(tokens, index, options)
+}
+md.renderer.rules.link_close = (tokens, index, options, env, self) => {
+  if (env) env.linkDepth = Math.max(0, Number(env.linkDepth || 0) - 1)
+  return defaultLinkClose ? defaultLinkClose(tokens, index, options, env, self) : self.renderToken(tokens, index, options)
+}
+md.renderer.rules.text = (tokens, index, _options, env) => {
+  const text = escapeHtml(tokens[index]!.content)
+  if (!env?.sourceCount || env.linkDepth) return text
+  return text.replace(/\[资料\s*(\d+)\]/g, (original, number: string) => {
+    const n = Number(number)
+    if (!Number.isSafeInteger(n) || n < 1 || n > Number(env.sourceCount)) return original
+    return `<button type="button" class="citation-link" data-source-index="${n - 1}" aria-label="查看资料${n}">${n}</button>`
+  })
+}
+
+export function renderAnswerMarkdown(text: string, sourceCount: number): string {
+  return md.render(text ?? '', { sourceCount, linkDepth: 0 })
+}

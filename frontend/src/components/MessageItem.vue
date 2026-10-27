@@ -4,21 +4,35 @@ import { CopyDocument, Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 
 import SourcePanel from './SourcePanel.vue'
-import type { ChatMessage } from '@/types'
-import { renderMarkdown } from '@/utils/markdown'
+import AssistantTurn from './AssistantTurn.vue'
+import type { ChatMessage, FeedbackRating } from '@/types'
+import { renderAnswerMarkdown } from '@/utils/markdown'
+import { useWorkspaceStore } from '@/stores/workspace'
 
-const props = defineProps<{ message: ChatMessage }>()
-const emit = defineEmits<{ (e: 'regenerate'): void }>()
+const props = defineProps<{ message: ChatMessage; canRegenerate?: boolean }>()
+const emit = defineEmits<{ (e: 'regenerate'): void; (e: 'feedback', rating: FeedbackRating): void; (e: 'ticket'): void }>()
 
 const isUser = computed(() => props.message.role === 'user')
 
 // markdown-it 已关闭原始 HTML（html: false），模型输出中的标签会被转义，
 // 因此这里的 v-html 只承载受控的 Markdown 渲染结果。
-const html = computed(() => renderMarkdown(props.message.content))
+const panel = useWorkspaceStore()
+const html = computed(() => renderAnswerMarkdown(props.message.content, props.message.contexts?.length ?? 0))
+function openCitation(event: MouseEvent) {
+  const target = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-source-index]')
+  if (!target) return
+  const index = Number(target.dataset.sourceIndex)
+  if (Number.isInteger(index) && props.message.contexts?.[index]) panel.openSources(props.message.contexts, props.message.sources, index)
+}
 
 const waiting = computed(
   () => props.message.streaming && !props.message.content && !props.message.error,
 )
+const waitingText = computed(() => {
+  const steps = props.message.run?.steps ?? []
+  if (steps.some(step => ['general_chat', 'get_assistant_info'].includes(step.name))) return '正在组织回复…'
+  return steps.length ? '正在查询资料或处理问题…' : '正在理解你的问题…'
+})
 
 async function copyContent() {
   try {
@@ -45,9 +59,9 @@ async function copyContent() {
             <span class="dot" />
             <span class="dot" />
             <span class="dot" />
-            <span class="msg__waiting-text">正在检索知识库…</span>
+            <span class="msg__waiting-text">{{ waitingText }}</span>
           </div>
-          <div v-else class="md-body" v-html="html" />
+          <div v-else class="md-body" @click="openCitation" v-html="html" />
           <span v-if="message.streaming && message.content" class="stream-caret" />
         </template>
       </div>
@@ -66,26 +80,37 @@ async function copyContent() {
         :sources="message.sources"
         :contexts="message.contexts"
       />
+      <AssistantTurn v-if="!isUser && message.run" :run="message.run" />
+      <details v-if="!isUser && message.retrieval && message.retrieval.status !== 'not_needed'" class="retrieval-trace">
+        <summary>{{ message.retrieval.status === 'fallback' ? '已使用原始问题检索' : '本轮检索问题' }}</summary>
+        <p>{{ message.retrieval.query }}</p>
+      </details>
 
       <div v-if="!message.streaming" class="msg__actions">
         <el-button link size="small" @click="copyContent">
           <el-icon><CopyDocument /></el-icon>
           <span>复制</span>
         </el-button>
-        <el-button v-if="!isUser" link size="small" @click="emit('regenerate')">
+        <el-button v-if="!isUser && canRegenerate" link size="small" @click="emit('regenerate')">
           <el-icon><Refresh /></el-icon>
           <span>重新生成</span>
         </el-button>
+        <template v-if="!isUser && message.content && !message.error && (!message.run || (message.run.status === 'completed' && !message.run.result.needs_input))">
+          <el-button v-if="message.id" link size="small" :type="message.feedback?.rating === 'helpful' ? 'success' : 'default'" @click="emit('feedback', 'helpful')">{{ message.feedback?.rating === 'helpful' ? '已标记有帮助' : '有帮助' }}</el-button>
+          <el-button v-if="message.id" link size="small" :type="message.feedback?.rating === 'unresolved' ? 'warning' : 'default'" @click="emit('feedback', 'unresolved')">{{ message.feedback?.rating === 'unresolved' ? '已反馈未解决' : '未解决' }}</el-button>
+          <el-button v-if="!message.run?.ticket_id" link type="primary" size="small" @click="emit('ticket')">转为工单</el-button>
+        </template>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+.retrieval-trace { margin-top: 10px; color: var(--text-secondary); font-size: 12px; }
 .msg {
   display: flex;
   gap: 12px;
-  padding: 6px 0;
+  padding: 18px 0;
 }
 
 .msg--user {
@@ -111,8 +136,8 @@ async function copyContent() {
 }
 
 .msg__avatar--ai {
-  background: linear-gradient(135deg, var(--brand-500), var(--brand-700));
-  color: #fff;
+  background: #f1edfb;
+  color: var(--brand-600);
 }
 
 .msg__main {
@@ -127,18 +152,20 @@ async function copyContent() {
 }
 
 .msg__bubble {
-  padding: 12px 16px;
+  padding: 0 0 8px;
   border-radius: var(--radius-lg);
   background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  box-shadow: var(--shadow-xs);
+  border: 0;
 }
 
 .msg--user .msg__bubble {
-  background: var(--brand-600);
-  border-color: var(--brand-600);
-  color: #fff;
+  padding: 12px 18px;
+  background: #f1eef9;
+  color: #51465f;
+  border-radius: 18px 5px 18px 18px;
 }
+.msg--user .msg__avatar { display: none; }
+.msg--user .msg__main { max-width: 85%; }.msg--assistant .msg__main { flex: 1; }.msg--assistant :deep(.md-body) { font-size: 15px; line-height: 1.9; }.msg--user .msg__actions { margin-top: 3px; }.msg__actions :deep(.el-button) { font-size: 11px; color: #91869e; }.msg__actions :deep(.el-button:hover) { color: var(--brand-600); }
 
 .msg__plain {
   font-size: 14.5px;
@@ -197,7 +224,8 @@ async function copyContent() {
   display: flex;
   gap: 4px;
   margin-top: 6px;
-  opacity: 0;
+  flex-wrap: wrap;
+  opacity: 1;
   transition: opacity 0.15s ease;
 }
 

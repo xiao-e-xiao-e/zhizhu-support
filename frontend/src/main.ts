@@ -10,10 +10,12 @@ import './style.css'
 
 import App from './App.vue'
 import { router } from './router'
+import { installReleaseRecovery } from './utils/releaseRecovery'
 
 const app = createApp(App)
 
 app.use(createPinia())
+installReleaseRecovery(router)
 app.use(router)
 app.use(ElementPlus, { locale: zhCn })
 

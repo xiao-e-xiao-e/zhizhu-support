@@ -2,12 +2,12 @@
    设计令牌
    ============================================================ */
 :root {
-  --brand-50: #eef2ff;
-  --brand-100: #e0e7ff;
-  --brand-200: #c7d2fe;
-  --brand-500: #6366f1;
-  --brand-600: #4f46e5;
-  --brand-700: #4338ca;
+  --brand-50: #f5f1fc;
+  --brand-100: #ece5fa;
+  --brand-200: #d5c7f0;
+  --brand-500: #9070cd;
+  --brand-600: #7958b3;
+  --brand-700: #66489c;
 
   --bg-page: #f4f5f7;
   --bg-surface: #ffffff;
@@ -38,21 +38,33 @@
   --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono",
     Menlo, monospace;
 
-  --sidebar-width: 260px;
+  --sidebar-width: 244px;
   --header-height: 60px;
 }
+
+/* 客服业务页面共用布局 */
+.support-page { height: 100%; overflow: auto; padding: 28px 32px 40px; }
+.support-head { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin-bottom: 20px; }
+.support-section { padding: 24px; margin: 20px 0; }
+.support-section h2 { font-size: 17px; }
+.support-muted { color: var(--text-secondary); font-size: 12px; line-height: 1.7; }
+.support-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 20px; }
+.support-filters .el-select { width: 200px; }
+.support-page .el-pagination { margin-top: 20px; }
+.ticket-table .el-table__row { cursor: pointer; }
+@media(max-width: 800px) { .support-page { padding: 20px 16px; } .support-head { align-items: flex-start; } }
 
 /* ============================================================
    Element Plus 主题覆盖
    ============================================================ */
 :root {
-  --el-color-primary: #4f46e5;
-  --el-color-primary-light-3: #7c74ea;
-  --el-color-primary-light-5: #a5a0f0;
-  --el-color-primary-light-7: #cecbf6;
-  --el-color-primary-light-8: #e0defa;
-  --el-color-primary-light-9: #f0effc;
-  --el-color-primary-dark-2: #4338ca;
+  --el-color-primary: #7958b3;
+  --el-color-primary-light-3: #a18acb;
+  --el-color-primary-light-5: #bcabd9;
+  --el-color-primary-light-7: #d7cde8;
+  --el-color-primary-light-8: #e4dcf0;
+  --el-color-primary-light-9: #f2eef8;
+  --el-color-primary-dark-2: #66489c;
   --el-border-radius-base: 8px;
   --el-border-radius-small: 6px;
   --el-font-family: var(--font-sans);
@@ -371,3 +383,37 @@ a:hover {
 .fade-leave-to {
   opacity: 0;
 }
+/* A visible recovery action when a browser resumes an older release. */
+.release-notice {
+  position: fixed;
+  z-index: 10000;
+  left: 50%;
+  top: 16px;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 18px;
+  border: 1px solid #c7d2fe;
+  border-radius: 10px;
+  background: #eef2ff;
+  color: #312e81;
+  box-shadow: 0 4px 20px #0001;
+}
+.release-notice button {
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 12px;
+  background: #4f46e5;
+  color: white;
+  cursor: pointer;
+}
+
+/* Inline answer citations are rendered from validated retrieval indices. */
+.citation-link { display: inline-flex; align-items: center; justify-content: center; min-width: 19px; height: 19px; padding: 0 4px; margin: 0 3px; vertical-align: super; border: 1px solid #e7def3; border-radius: 5px; color: #8c6dbb; background: #f8f4fd; cursor: pointer; font: 10px var(--font-sans); }
+.citation-link:hover { background: #ede4fb; border-color: #c9b5e5; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--brand-500); outline-offset: 3px; }
+@media(prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
