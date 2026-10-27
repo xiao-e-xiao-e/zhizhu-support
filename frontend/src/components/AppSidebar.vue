@@ -8,6 +8,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { useChatStore } from '@/stores/chat'
 import { useConversationsStore, conversationTitle } from '@/stores/conversations'
 import { useWorkspaceStore } from '@/stores/workspace'
+import { brand } from '@/config/branding'
 defineProps<{ mobile?: boolean }>()
 const emit = defineEmits<{ navigate: [] }>()
 const auth = useAuthStore(), chat = useChatStore(), settings = useSettingsStore()
@@ -44,8 +45,8 @@ async function logout() {
 <template>
   <aside class="sidebar" :class="{ 'sidebar--collapsed': workspace.collapsed && !mobile }">
     <div class="sidebar__brand">
-      <router-link to="/assistant" class="brand-mark" aria-label="智能客服工作台">知</router-link>
-      <span class="brand-title sidebar-label">智能客服工作台</span>
+      <router-link to="/assistant" class="brand-mark" :aria-label="brand.title">知</router-link>
+      <span class="brand-title sidebar-label">{{ brand.name }}<small>客服与知识协作</small></span>
       <button v-if="!mobile" class="icon-button collapse-button" :aria-label="workspace.collapsed ? '展开侧栏' : '收起侧栏'" @click="workspace.collapsed = !workspace.collapsed"><el-icon><Expand v-if="workspace.collapsed" /><Fold v-else /></el-icon></button>
     </div>
     <button class="new-chat" title="新对话" @click="switchConversation()"><el-icon><Plus /></el-icon><span class="sidebar-label">新对话</span></button>
@@ -80,6 +81,7 @@ async function logout() {
 .sidebar__brand { display: flex; align-items: center; gap: 9px; height: 76px; flex-shrink: 0; padding: 0 6px; }
 .brand-mark { display: grid; place-items: center; width: 30px; height: 32px; border-radius: 10px; background: var(--brand-600); color: white; font-size: 17px; font-weight: 600; flex-shrink: 0; text-decoration: none; }
 .brand-title { font-size: 14px; font-weight: 600; white-space: nowrap; }.collapse-button { margin-left: auto; }
+.brand-title small { display: block; font-size: 10px; font-weight: 400; color: #91869e; margin-top: 1px; }
 .icon-button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: #888595; cursor: pointer; font-size: 17px; flex-shrink: 0; }.icon-button:hover { background: #ebeaf1; color: var(--text-primary); }
 .new-chat { display: flex; align-items: center; gap: 12px; min-height: 42px; padding: 0 14px; border: 1px solid #dcd6f7; border-radius: 11px; background: #efeafa; color: #6250bf; font: 500 14px var(--font-sans); cursor: pointer; margin-bottom: 20px; flex-shrink: 0; }.new-chat:hover { background: #e6dff9; }
 .sidebar__scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }.sidebar__nav { display: grid; gap: 3px; }.nav-item { display: flex; width: 100%; align-items: center; gap: 12px; padding: 10px 13px; border: 0; border-radius: 9px; font: 14px var(--font-sans); color: #676473; background: transparent; cursor: pointer; white-space: nowrap; text-decoration: none; text-align: left; }.nav-item .el-icon { font-size: 17px; flex-shrink: 0; }.nav-item:hover,.recent-item:hover { background: #eeedf3; }.nav-item.active { background: #eeebf8; color: #6750c5; font-weight: 600; }

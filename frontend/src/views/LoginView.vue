@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { brand } from '@/config/branding'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -32,7 +33,8 @@ async function submit() {
   <main class="login-page">
     <section class="login-card">
       <div class="login-brand">知</div>
-      <h1>智能客服工作台</h1>
+      <h1>{{ brand.name }}</h1>
+      <p class="product-name">{{ brand.description }}</p>
       <p class="intro">查找产品知识，获得排查建议，跟进问题处理。</p>
       <form @submit.prevent="submit()">
         <label for="username">用户名</label>
@@ -53,6 +55,7 @@ async function submit() {
 .login-card { width: 100%; max-width: 420px; padding: 36px; background: white; border: 1px solid var(--border-default); border-radius: 18px; box-shadow: var(--shadow-md); }
 .login-brand { width: 44px; height: 44px; display: grid; place-items: center; background: var(--brand-600); color: white; border-radius: 12px; font-size: 22px; margin-bottom: 22px; }
 h1 { font-size: 24px; margin-bottom: 8px; }
+.product-name { color: var(--brand-600); font-size: 13px; margin-bottom: 12px; }
 .intro { color: var(--text-secondary); margin-bottom: 24px; }
 label { display: block; margin: 16px 0 6px; font-weight: 500; }
 .login-card .el-button { width: 100%; margin-top: 24px; }

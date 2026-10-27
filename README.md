@@ -1,131 +1,109 @@
-# RAG 知识库问答系统
+# 知助 · 智能客服与知识协作平台
 
-基于检索增强生成（Retrieval-Augmented Generation）的本地知识库问答系统。
-上传文档 → 自动切分与向量化 → 提问时先检索相关片段，再由大模型基于片段作答，
-回答附带可展开的参考来源与相似度分数。
+**ZhiZhu Support** 是面向软件产品团队的智能应用，把产品资料、流式 AI 对话、人工工单和 FAQ 运营连成一个工作流程。
 
-前后端分离：后端提供 REST + SSE 接口，前端是独立的 Vue 单页应用。
+用户可以自然交流、查询产品资料、跟进本人工单；需要人工协助时，由助手整理草稿，用户核对后提交。客服处理问题，再将可复用的解决方案审核发布到知识库。
 
-## 架构
+仓库地址：[xiao-e-xiao-e/zhizhu-support](https://github.com/xiao-e-xiao-e/zhizhu-support)。开发分支为 `dev`，默认主分支为 `master`；当前改造通过草稿 PR 审核，获得确认后再合并。
 
+## 已实现的功能
+
+- **统一智能助手**：普通交流、公开身份与模型信息、产品资料检索、相似工单与工单状态查询；正文边生成边显示，停止和断线保留已收到的内容。
+- **可追溯回答**：文中引用与右侧资料面板对应，保留回答当时使用的片段和修订版本。
+- **完整知识入库**：PDF、DOCX、HTML、CSV、Markdown、TXT 解析，后台任务、失败重试、分块预览、文档修订、审核发布、撤回、回滚和归档。
+- **人工支持闭环**：工单草稿确认、幂等提交、接单分配、评论、解决、重新打开与关闭；提交时保存相关对话副本。
+- **FAQ 知识运营**：从已解决问题整理草稿，审核后后台入库并发布，避免未审核内容进入用户回答。
+- **权限与账号**：用户、客服、管理员三类角色；产品授权、私人会话隔离、本人或团队工单范围；不公开登录密码。
+- **业务界面**：最近对话、可折叠侧栏、资料与草稿面板、手机抽屉、回答反馈、会话重命名及导出。
+- **工程交付**：PostgreSQL / SQLite、数据库迁移、Docker Compose、健康检查、CI、自动回归与真实模型评估。
+
+当前应用版本为 **2.6.1**，数据库结构为 **0007**。项目已完成 M1–M4 的实现与本机验收，M5 公网部署加固仍按计划推进。
+
+## 快速启动（Docker，PowerShell）
+
+需要 Docker Compose。首次构建需要网络下载依赖和本地嵌入模型。
+
+```powershell
+git clone https://github.com/xiao-e-xiao-e/zhizhu-support.git
+cd zhizhu-support
+git switch dev
+
+# 生成部署配置和独立随机数据库密码；已有配置不会覆盖
+.\scripts\init-deploy.ps1 -WebPort 8088
+
+# 编辑 .env.deploy.local，填写自己的 API_KEY，核对 API_BASE_URL 与 CHAT_MODEL
+docker compose --env-file .env.deploy.local up -d --build
+
+# 首次部署交互创建管理员，密码不通过命令行参数传递
+docker compose --env-file .env.deploy.local exec api python manage.py create-admin --username admin
 ```
-frontend/                     Vue 3 + Vite + TypeScript + Element Plus
-    │  HTTP / SSE（开发期经 Vite 代理）
-    ▼
-backend/app/
-    ├── routers/              接口层：documents / chat / sessions / system
-    ├── services/
-    │   ├── parser.py         多格式解析 + 段落感知分块
-    │   ├── embedding.py      fastembed（ONNX Runtime）本地语义嵌入
-    │   ├── vectorstore.py    ChromaDB 持久化集合（余弦空间）
-    │   ├── rag.py            检索 → 拼上下文 → LLM 生成（支持流式）
-    │   └── sessions.py       会话 JSON 持久化（原子写入）
-    └── core/config.py        统一配置
-    ▼
-chroma_db/                    向量库（sqlite3）
-data/                         示例文档
+
+打开 [http://127.0.0.1:8088](http://127.0.0.1:8088)。管理员登录后创建产品、版本和业务账号，并通过文档管理上传、入库及发布资料。新安装不会自动拥有本机已有的账号或业务数据。
+
+```powershell
+# 查看服务与健康状态
+docker compose --env-file .env.deploy.local ps
+
+# 更新代码后重建并启动
+docker compose --env-file .env.deploy.local up -d --build
 ```
 
-## 快速开始
+Compose 的运行项目名继续使用 `support-platform`，以兼容已有的 PostgreSQL、向量库、原件和模型缓存卷。项目与仓库改名不会迁移或重置这些卷。新安装可以显式指定独立的 Compose 项目名；已有部署沿用原项目名。
 
-### 1. 后端
+原生开发、配置解释、升级步骤及公网准备见 [开发和部署说明](docs/DEPLOYMENT.md)。
 
-```bash
+## 技术架构
+
+```text
+Vue 3 + TypeScript + Vite + Element Plus + Pinia
+                       │ REST / SSE
+                       ▼
+                  FastAPI API
+                       │
+         ┌─────────────┼────────────────┐
+         ▼             ▼                ▼
+   SQLAlchemy       Chroma 服务     兼容 OpenAI 的模型 API
+   PostgreSQL       BGE / ONNX      工具选择与正文流式生成
+   或 SQLite        本地语义嵌入
+         ▲             ▲
+         └──── 独立入库 worker ──────────┘
+```
+
+| 目录 | 内容 |
+| --- | --- |
+| `frontend/src/` | 智能助手、业务页面、状态管理、引用与草稿面板 |
+| `backend/app/` | 身份授权、资料管理、检索、工具运行、工单与 FAQ 业务 |
+| `backend/migrations/` | Alembic 数据迁移 |
+| `backend/tests/`、`frontend/tests/` | 隔离回归与前端事件处理检查 |
+| `backend/evals/` | 检索、问答、工具执行和 FAQ 质量评估 |
+| `backend/business_documents/` | 可经正常业务流程入库的产品指南 |
+| `deploy/`、`compose.yaml` | 容器部署与反向代理 |
+| `docs/` | 项目计划、部署、业务使用与验收记录 |
+
+运行配置、凭据、数据库、上传原件、模型缓存和私有验证产物均不入库。
+
+## 开发检查
+
+后端使用 Python 3.12，前端使用 Node.js 24。原生开发先创建虚拟环境并安装 `backend/requirements-dev.lock`。
+
+```powershell
 cd backend
+python -m ruff check app manage.py worker.py tests migrations evals
+python -m pytest -q
 
-# 创建虚拟环境
-python -m venv .venv
-.venv/Scripts/activate          # Windows
-# source .venv/bin/activate     # macOS / Linux
-
-# 安装依赖
-pip install -r requirements.txt
-
-# 配置
-cp .env.example .env
-# 编辑 .env，填入 API_KEY
-
-# 启动
-python run.py
+cd ../frontend
+npm ci
+npm test
+npm run build
 ```
 
-后端跑在 `http://127.0.0.1:8000`，接口文档在 `http://127.0.0.1:8000/docs`。
+CI 分别验证 SQLite、专用 PostgreSQL 和前端构建。真实模型评估另行运行，会消耗模型 API 用量；历史评估报告记录其对应版本的结果。
 
-首次启动会自动下载嵌入模型 `BAAI/bge-small-zh-v1.5`（约 95MB），
-之后缓存在 `backend/.model_cache/`。
+## 项目文档
 
-### 2. 前端
+- [项目计划书](docs/PROJECT_PLAN.md)与[执行记录](docs/EXECUTION_LOG.md)
+- [业务账号与产品资料](docs/BUSINESS_GUIDE.md)
+- [M2 工单与权限](docs/M2_ACCEPTANCE.md)、[M3 知识入库与版本](docs/M3_ACCEPTANCE.md)、[M4 智能工作流](docs/M4_ACCEPTANCE.md)
+- [知识问答评估](docs/evaluations/m3-baseline/REPORT.md)与[工具及 FAQ 评估](docs/evaluations/m4-baseline/REPORT.md)
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-打开 `http://localhost:5173`。开发服务器已配置 `/api` 代理到后端 8000 端口，
-前端代码里只写相对路径，无需额外处理跨域。
-
-生产构建：
-
-```bash
-npm run build          # 产物在 frontend/dist/
-```
-
-## 技术栈
-
-| 层 | 选型 |
-|---|---|
-| 前端框架 | Vue 3.5（`<script setup>` + TypeScript） |
-| 构建工具 | Vite 8 |
-| UI 组件 | Element Plus（自定义主题令牌） |
-| 状态管理 | Pinia |
-| 路由 | Vue Router 4 |
-| Markdown | markdown-it + highlight.js（按需注册语言） |
-| 后端框架 | FastAPI + Uvicorn |
-| 向量数据库 | ChromaDB（PersistentClient，余弦距离空间） |
-| 嵌入模型 | fastembed + BAAI/bge-small-zh-v1.5（ONNX Runtime，512 维） |
-| LLM 调用 | openai SDK（兼容 DeepSeek 等 OpenAI 格式端点） |
-| 文档解析 | PyPDF2、python-docx、html.parser、csv |
-
-## 接口一览
-
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| GET | `/api/health` | 健康检查 |
-| GET | `/api/config` | 前端所需默认配置（不回传 API Key） |
-| POST | `/api/documents/upload` | 上传并入库（多文件） |
-| POST | `/api/documents/preview` | 只解析预览，不入库 |
-| GET | `/api/documents` | 已入库文件列表 |
-| GET | `/api/documents/stats` | 知识库统计 |
-| POST | `/api/documents/search` | 纯向量检索（不调 LLM） |
-| GET | `/api/documents/{name}/chunks` | 查看某文件的分块 |
-| DELETE | `/api/documents/{name}` | 删除某文件的全部分块 |
-| POST | `/api/chat/ask` | 非流式问答 |
-| POST | `/api/chat/stream` | SSE 流式问答 |
-| GET | `/api/sessions` | 会话列表 |
-| GET | `/api/sessions/{name}` | 会话详情 |
-| PUT | `/api/sessions/{name}` | 覆盖保存会话 |
-| DELETE | `/api/sessions/{name}` | 删除会话 |
-| GET | `/api/sessions/{name}/export` | 导出为 Markdown |
-
-## 相比旧版（Streamlit 单体）的改动
-
-旧版本是单进程 Streamlit 应用，`app.py` + `src/` 三个模块，前端逻辑与业务逻辑混在一起。
-本次重构为前后端分离，同时修掉了四个实质性缺陷：
-
-1. **依赖声明缺失**：旧 `requirements.txt` 没列 `scikit-learn` 与 `numpy`，
-   而代码默认路径依赖它们，照 README 装完必然 ImportError。
-   新版改用 fastembed，依赖清单与实际导入一致。
-
-2. **向量库退化为文档存储器**：旧实现在本地模式下每次入库都重新拟合 TF-IDF 词汇表，
-   历史向量随之失效；检索时更是把全库文档拉出来重新拟合、手算余弦，
-   ChromaDB 的 HNSW 索引从未被使用，检索复杂度是 O(N) 全量扫描。
-   新版入库与检索共用同一个嵌入模型，检索走 `collection.query()`，索引真正生效。
-
-3. **相似度语义错误**：旧实现用 `1 - distance` 当相似度，但集合是默认的 L2 空间，
-   L2 距离无上界，换算结果可以为负且与余弦无关。
-   新版显式声明 `hnsw:space=cosine`，`1 - distance` 就是余弦相似度。
-
-4. **中文适配**：旧实现用 `char_wb`（按词边界切字符 n-gram），
-   对中文这类无空格语言会退化。新版直接换成中文语义向量模型，
-   从根本上不再依赖字面匹配。
+项目由最初的 Streamlit 知识库问答系统逐步演进而来；原有主分支历史保留，新的开发与审核围绕智能客服和知识协作流程开展。

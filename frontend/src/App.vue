@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import AppSidebar from '@/components/AppSidebar.vue'
+import { brand } from '@/config/branding'
 import WorkspacePanel from '@/components/WorkspacePanel.vue'
 import { useConversationsStore } from '@/stores/conversations'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -36,7 +37,7 @@ onUnmounted(() => window.removeEventListener('auth-expired', expired))
   <router-view v-if="!auth.user && route.meta.public" />
   <div v-else-if="auth.user" class="app-shell">
     <AppSidebar class="desktop-sidebar" />
-    <header class="mobile-topbar"><b>智能客服工作台</b><el-button aria-label="打开导航菜单" @click="mobileMenu = true">菜单</el-button></header>
+    <header class="mobile-topbar"><b>{{ brand.name }}</b><span class="mobile-brand-desc">{{ brand.description }}</span><el-button aria-label="打开导航菜单" @click="mobileMenu = true">菜单</el-button></header>
     <el-drawer v-model="mobileMenu" title="导航菜单" direction="ltr" size="280px" :with-header="false" class="mobile-menu-drawer"><AppSidebar mobile style="width: 100%; height: 100%" @navigate="mobileMenu = false" /></el-drawer>
     <main class="app-main">
       <router-view v-slot="{ Component }">
@@ -52,6 +53,7 @@ onUnmounted(() => window.removeEventListener('auth-expired', expired))
 
 <style scoped>
 .mobile-topbar { display: none; }
+.mobile-brand-desc { margin-right: auto; margin-left: 10px; font-size: 11px; color: var(--text-secondary); }
 .mobile-menu-drawer :deep(.el-drawer__body) { padding: 0; }
 .app-loading { min-height: 100vh; display: grid; place-items: center; color: var(--text-secondary); }
 .app-shell {

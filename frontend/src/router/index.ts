@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { brand } from '@/config/branding'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -41,5 +42,5 @@ router.beforeEach(async (to) => {
 
 router.afterEach((to) => {
   const title = to.meta?.title as string | undefined
-  document.title = title ? `${title} · 知识库` : '智能客服工作台'
+  document.title = title ? `${title} · ${brand.name}` : brand.title
 })

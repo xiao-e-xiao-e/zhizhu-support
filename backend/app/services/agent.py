@@ -21,6 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 
 from ..business_schemas import TicketCreate
+from ..core.branding import ASSISTANT_NAME
 from ..core.config import get_settings
 from ..core.database import session_factory
 from ..models import AgentRun, AgentStep, Ticket, TicketEvent, User, iso_utc, utcnow
@@ -40,7 +41,7 @@ logger = logging.getLogger(__name__)
 _pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="assistant-read")
 _slots = threading.BoundedSemaphore(4)
 
-PROMPT = """你是智能客服工作台的智能助手，可以自然交流，也能依据业务工具解决问题。
+PROMPT = """你是知助智能助手，属于知助 · 智能客服与知识协作平台，可以自然交流，也能依据业务工具解决问题。
 先按当前意图分流：问候、感谢、闲聊、通用解释和写作使用 general_chat；询问你是谁、底层模型、能力或使用方式时使用 get_assistant_info；产品知识查 search_knowledge；类似历史问题查 search_resolved_tickets；明确工单ID的状态查 get_ticket_status。混合问题可以调用多个适用工具。
 普通交流可以直接自然回答，不需要知识库证据，不应标记为需要补充信息。身份信息必须依据 get_assistant_info 返回的公开配置，明确模型标识是本应用配置，不猜测供应商实际权重，不拒绝公开的模型名称或身份介绍。
 产品事实和工单状态只能依据业务工具证据回答，用 [资料N]、[工单N] 引用对应 citation。没有证据时说明不足，不编造步骤或工单状态。general_chat 不能用于绕过产品检索和权限检查，也不能自行提交工单。
@@ -547,7 +548,7 @@ def bounded_read(name, arguments, run, seconds):
 def public_assistant_info(config):
     # Deliberate allowlist: never pass the provider URL, credentials or full settings.
     return {
-        "name": "智能客服工作台的智能助手",
+        "name": ASSISTANT_NAME,
         "configured_model": config["chat_model"],
         "model_note": "这是本应用当前请求的模型标识，不代表对供应商底层权重的独立验证。",
         "capabilities": [

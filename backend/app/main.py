@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select
 
 from .core.auth import current_user
+from .core.branding import API_NAME
 from .core.config import get_settings
 from .core.database import session_factory
 from .models import User
@@ -71,7 +72,7 @@ async def lifespan(app: FastAPI):
 settings = get_settings()
 
 app = FastAPI(
-    title="智能客服与工单协作平台 API",
+    title=API_NAME,
     description="基于向量检索增强生成的本地知识库问答服务",
     version="2.6.1",
     lifespan=lifespan,
@@ -120,6 +121,6 @@ app.include_router(faq.router)
 @app.get("/", include_in_schema=False)
 def root() -> dict:
     return {
-        "service": "智能客服与工单协作平台 API",
+        "service": API_NAME,
         "version": "2.6.1",
     }
