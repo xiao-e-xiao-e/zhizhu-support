@@ -20,22 +20,7 @@ export const useSettingsStore = defineStore('settings', () => {
     chunkOverlap: 100,
   })
 
-  /** LLM 覆盖配置：留空则用后端 .env */
-  const llm = reactive({
-    apiKey: '',
-    apiBaseUrl: '',
-    chatModel: '',
-  })
-
-  const llmReady = computed(
-    () => Boolean(llm.apiKey) || Boolean(config.value?.llm_configured),
-  )
-
-  const llmPayload = computed(() => ({
-    api_key: llm.apiKey || undefined,
-    api_base_url: llm.apiBaseUrl || undefined,
-    chat_model: llm.chatModel || undefined,
-  }))
+  const llmReady = computed(() => Boolean(config.value?.llm_configured))
 
   function restore() {
     try {
@@ -43,7 +28,8 @@ export const useSettingsStore = defineStore('settings', () => {
       if (!raw) return false
       const saved = JSON.parse(raw)
       if (saved?.rag) Object.assign(rag, saved.rag)
-      if (saved?.llm) Object.assign(llm, saved.llm)
+      // 重写旧格式，清除浏览器曾经持久化的模型密钥。
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ rag }))
       return true
     } catch {
       return false
@@ -52,13 +38,13 @@ export const useSettingsStore = defineStore('settings', () => {
 
   function persist() {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ rag, llm }))
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ rag }))
     } catch {
       /* 隐私模式下 localStorage 不可写，忽略即可 */
     }
   }
 
-  watch([rag, llm], persist, { deep: true })
+  watch(rag, persist, { deep: true })
 
   async function loadConfig() {
     loading.value = true
@@ -72,8 +58,6 @@ export const useSettingsStore = defineStore('settings', () => {
         rag.similarityThreshold = data.defaults.similarity_threshold
         rag.chunkSize = data.defaults.chunk_size
         rag.chunkOverlap = data.defaults.chunk_overlap
-        llm.apiBaseUrl = data.api_base_url
-        llm.chatModel = data.chat_model
       }
       error.value = ''
     } catch (e) {
@@ -97,9 +81,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loading,
     error,
     rag,
-    llm,
     llmReady,
-    llmPayload,
     restore,
     loadConfig,
     resetRag,

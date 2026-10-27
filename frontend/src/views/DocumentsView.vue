@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { UploadFile } from 'element-plus'
 import { Delete, Document, Search, UploadFilled, View } from '@element-plus/icons-vue'
@@ -7,10 +7,93 @@ import { Delete, Document, Search, UploadFilled, View } from '@element-plus/icon
 import * as api from '@/api'
 import { useLibraryStore } from '@/stores/library'
 import { useSettingsStore } from '@/stores/settings'
-import type { ChunkHit } from '@/types'
+import { useCatalogStore } from '@/stores/catalog'
+import ScopePicker from '@/components/ScopePicker.vue'
+import { http } from '@/api/client'
+import type { ChunkHit, DocumentItem, KnowledgeScope, KnowledgeRevision, RevisionHistory } from '@/types'
+import { useAuthStore } from '@/stores/auth'
 
 const library = useLibraryStore()
 const settings = useSettingsStore()
+const catalog = useCatalogStore()
+const auth = useAuthStore()
+const isAdmin = computed(() => auth.user?.role === 'admin')
+const workerOnline = ref<boolean | null>(null)
+const versionsOpen = ref(false)
+const selectedId = ref('')
+const selected = computed(() => library.documents.find(d => d.id === selectedId.value))
+const versions = ref<RevisionHistory>({ revision: 1, revisions: [], events: [] })
+const actionBusy = ref(false)
+const stateLabels: Record<string, string> = { queued: '等待入库', processing: '正在入库', ready: '待发布', published: '已发布', superseded: '历史发布', failed: '入库失败' }
+const eventLabels: Record<string, string> = { upload: '上传修订', index_ready: '入库完成', index_failed: '入库失败', publish: '发布修订', withdraw: '撤回发布', archive: '归档', restore: '恢复', scope: '修改分类', retry: '重试任务', legacy_import: '旧资料登记' }
+let timer: ReturnType<typeof setInterval> | undefined
+let refreshing = false
+let disposed = false
+
+async function loadVersions() {
+  if (selectedId.value) versions.value = (await http.get<RevisionHistory>(`/documents/${selectedId.value}/revisions`)).data
+}
+async function refresh() {
+  if (refreshing || disposed) return
+  refreshing = true
+  try {
+    await library.refresh()
+    if (disposed) return
+    workerOnline.value = (await http.get<{ worker_online: boolean }>('/documents/jobs')).data.worker_online
+    if (versionsOpen.value) await loadVersions()
+  } catch (e) { if (!disposed) ElMessage.error((e as Error).message) }
+  finally { refreshing = false }
+}
+onMounted(() => { void refresh(); timer = setInterval(() => void refresh(), 4000) })
+onBeforeUnmount(() => { disposed = true; clearInterval(timer) })
+async function openVersions(doc: DocumentItem) {
+  selectedId.value = doc.id
+  try { await loadVersions(); versionsOpen.value = true }
+  catch (e) { ElMessage.error((e as Error).message) }
+}
+async function changeDocument(action: string, revisionId?: string) {
+  const doc = selected.value
+  if (!doc || actionBusy.value) return
+  if (['publish', 'withdraw', 'archive'].includes(action)) {
+    try { await ElMessageBox.confirm(action === 'publish' ? '发布后，问答将立即使用此修订，并保留历史版本供回滚。' : action === 'archive' ? '归档后，此文档将立即退出问答检索。原始文件和历史修订保留。' : '撤回后，此文档将暂时退出问答检索。', '确认文档操作', { confirmButtonText: '确认', cancelButtonText: '取消' }) }
+    catch { return }
+  }
+  actionBusy.value = true
+  try {
+    await http.post(`/documents/${doc.id}/${action}`, { revision: versions.value.revision, revision_id: revisionId ?? null })
+    await library.refresh(); await loadVersions(); ElMessage.success('文档已更新')
+  } catch (e) { ElMessage.error((e as Error).message); await refresh() }
+  finally { actionBusy.value = false }
+}
+async function retryRevision(row: KnowledgeRevision) {
+  if (!row.job) return
+  actionBusy.value = true
+  try { await http.post(`/documents/jobs/${row.job.id}/retry`); await library.refresh(); await loadVersions(); ElMessage.success('已重新排队') }
+  catch (e) { ElMessage.error((e as Error).message) }
+  finally { actionBusy.value = false }
+}
+const scope = ref<KnowledgeScope>({ product_id: null, version_id: null })
+const scopeOpen = ref(false)
+const scopeDocument = ref('')
+const editScope = ref<KnowledgeScope>({ product_id: null, version_id: null })
+const scopeBusy = ref(false)
+
+function scopeLabel(document: DocumentItem) {
+  const product = catalog.products.find(p => p.id === document.product_id)
+  return product ? `${product.name} ${product.versions.find(v => v.id === document.version_id)?.name || '全部版本'}` : '未分类'
+}
+function openScope(document: DocumentItem) {
+  scopeDocument.value = document.id
+  selectedId.value = document.id
+  editScope.value = { product_id: document.product_id ?? null, version_id: document.version_id ?? null }
+  scopeOpen.value = true
+}
+async function saveScope() {
+  scopeBusy.value = true
+  try { await http.patch(`/documents/${encodeURIComponent(scopeDocument.value)}/scope`, { ...editScope.value, revision: selected.value?.revision }); await library.refresh(); scopeOpen.value = false; ElMessage.success('文档分类已更新') }
+  catch (e) { ElMessage.error((e as Error).message) }
+  finally { scopeBusy.value = false }
+}
 
 const pendingFiles = ref<File[]>([])
 const previewText = ref('')
@@ -71,18 +154,19 @@ async function doUpload() {
       pendingFiles.value,
       settings.rag.chunkSize,
       settings.rag.chunkOverlap,
+      scope.value,
     )
 
     if (result.failed > 0) {
       ElMessage.warning(
-        `入库完成：新增 ${result.total_chunks} 个文本块，${result.failed} 个文件失败`,
+        `已接受 ${result.results.length - result.failed} 个文件，${result.failed} 个文件提交失败`,
       )
       result.results
         .filter((item) => !item.ok)
         .forEach((item) => ElMessage.error(`${item.filename}：${item.error}`))
     } else {
       ElMessage.success(
-        `入库完成，${result.results.length} 个文件共新增 ${result.total_chunks} 个文本块`,
+        `已接受 ${result.results.length} 个文件，后台处理完成后请审核发布；相同内容自动去重`,
       )
     }
 
@@ -94,29 +178,11 @@ async function doUpload() {
   }
 }
 
-async function viewChunks(source: string) {
+async function viewChunks(id: string, title: string, revisionId?: string) {
   try {
-    chunkRows.value = await library.loadChunks(source)
-    chunkTitle.value = source
+    chunkRows.value = (await http.get(`/documents/${id}/chunks`, { params: { revision_id: revisionId } })).data
+    chunkTitle.value = title
     chunkDrawer.value = true
-  } catch (e) {
-    ElMessage.error((e as Error).message)
-  }
-}
-
-async function removeDoc(source: string) {
-  try {
-    await ElMessageBox.confirm(
-      `删除后「${source}」的全部分块会从向量库移除，确定继续吗？`,
-      '删除文档',
-      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
-    )
-  } catch {
-    return
-  }
-  try {
-    await library.remove(source)
-    ElMessage.success(`已删除 ${source}`)
   } catch (e) {
     ElMessage.error((e as Error).message)
   }
@@ -131,6 +197,7 @@ async function doSearch() {
       query,
       settings.rag.topK,
       settings.rag.similarityThreshold,
+      scope.value,
     )
     if (!searchResults.value.length) {
       ElMessage.info('没有命中片段，可以试试调低侧栏的相似度阈值')
@@ -150,8 +217,7 @@ async function doSearch() {
         <div>
           <h1 class="page-title">文档管理</h1>
           <p class="page-desc">
-            支持 PDF、DOCX、HTML、CSV、Markdown、TXT 与常见代码文件；
-            上传后按段落边界切分并编码为语义向量
+            上传、后台处理、审核发布与历史回滚。问答仅使用已发布的修订。
           </p>
         </div>
         <div class="head__stats">
@@ -166,19 +232,23 @@ async function doSearch() {
         </div>
       </header>
 
+      <el-alert v-if="workerOnline === false" title="后台处理进程暂未连接，已提交文件会保留在队列中；请联系管理员检查 worker。" type="warning" :closable="false" show-icon style="margin-bottom: 18px" />
+      <el-alert v-if="library.error" :title="library.error" type="error" :closable="false" style="margin-bottom: 18px" />
+
       <section class="card block">
+        <div class="document-scope"><span class="section-label">上传与检索范围</span><ScopePicker v-model="scope" /><p>相同分类和文件名创建连续修订；不同产品或版本可使用相同文件名。未选择范围时检索全部已发布资料。</p></div>
         <el-upload
           drag
           multiple
           :auto-upload="false"
           :show-file-list="false"
           :on-change="handleFileChange"
-          accept=".pdf,.docx,.html,.htm,.csv,.md,.markdown,.txt,.py,.js,.ts,.json,.yaml,.yml"
+          accept=".pdf,.docx,.html,.htm,.csv,.md,.markdown,.txt"
         >
           <el-icon class="upload-icon"><UploadFilled /></el-icon>
           <div class="upload-text">把文件拖到这里，或<em>点击选择</em></div>
           <div class="upload-hint">
-            单个文件失败不影响其他文件；同名文件会覆盖旧版本
+            支持 PDF、DOCX、HTML、CSV、Markdown、TXT；最多 10 个文件，每个不超过 20 MB
           </div>
         </el-upload>
 
@@ -201,7 +271,7 @@ async function doSearch() {
                 @click="doUpload"
               >
                 <el-icon><UploadFilled /></el-icon>
-                <span>解析并入库</span>
+                <span>提交后台入库</span>
               </el-button>
             </div>
           </div>
@@ -231,8 +301,8 @@ async function doSearch() {
 
       <section class="card block">
         <div class="block__head">
-          <span class="section-label">已入库文档</span>
-          <el-button link size="small" :loading="library.loading" @click="library.refresh()">
+          <span class="section-label">文档与修订</span>
+          <el-button link size="small" :loading="library.loading" @click="refresh()">
             刷新
           </el-button>
         </div>
@@ -250,15 +320,13 @@ async function doSearch() {
               </span>
             </template>
           </el-table-column>
-          <el-table-column prop="chunks" label="分块数" width="110" align="center" />
-          <el-table-column label="操作" width="170" align="right">
+          <el-table-column label="当前发布" width="110"><template #default="{ row }">{{ row.archived ? '已归档' : row.published_revision ? `修订 ${row.published_revision}` : '未发布' }}</template></el-table-column>
+          <el-table-column label="最新修订" min-width="180"><template #default="{ row }"><div v-if="row.latest">#{{ row.latest.number }} · {{ stateLabels[row.latest.state] }}<p v-if="row.latest.job" class="chunk-hint">{{ row.latest.job.state === 'succeeded' ? '入库完成' : row.latest.job.phase }} · {{ row.latest.job.progress }}%</p></div></template></el-table-column>
+          <el-table-column label="产品与版本" min-width="170"><template #default="{ row }">{{ scopeLabel(row) }}</template></el-table-column>
+          <el-table-column label="操作" width="220" align="right">
             <template #default="{ row }">
-              <el-button link size="small" @click="viewChunks(row.source)">
-                查看分块
-              </el-button>
-              <el-button link type="danger" size="small" @click="removeDoc(row.source)">
-                删除
-              </el-button>
+              <el-button link type="primary" size="small" @click="openVersions(row)">版本管理</el-button>
+              <el-button link size="small" :disabled="!!row.published_revision" @click="openScope(row)">分类</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -267,7 +335,7 @@ async function doSearch() {
           <el-icon :size="26"><Document /></el-icon>
           <div class="empty-state__title">知识库还是空的</div>
           <div class="empty-state__hint">
-            上传第一份文档后，就可以到「智能问答」里基于它提问了
+            上传第一份文档，入库后由管理员审核发布，即可供智能助手查询
           </div>
         </div>
       </section>
@@ -277,7 +345,7 @@ async function doSearch() {
           <span class="section-label">快速检索</span>
         </div>
         <p class="block__desc">
-          只做向量检索、不调用大模型，用来直观检查知识库里到底存了什么
+          检索当前范围内的已发布资料，用来检查问答可用的证据
         </p>
 
         <el-input
@@ -316,10 +384,43 @@ async function doSearch() {
         </div>
       </div>
     </el-drawer>
+    <el-dialog v-model="scopeOpen" :title="`文档分类：${selected?.source ?? ''}`" width="560px"><p>已发布文档需要先撤回，才能修改分类。</p><ScopePicker v-model="editScope" /><template #footer><el-button :disabled="scopeBusy" @click="scopeOpen = false">取消</el-button><el-button type="primary" :loading="scopeBusy" @click="saveScope">保存分类</el-button></template></el-dialog>
+    <el-dialog v-model="versionsOpen" :title="`版本管理 · ${selected?.source ?? ''}`" width="min(1080px, 95vw)">
+      <p v-if="selected">{{ scopeLabel(selected) }} · {{ selected.archived ? '已归档' : selected.published_revision ? `当前发布修订 ${selected.published_revision}` : '尚未发布' }}</p>
+      <div v-if="isAdmin" class="version-actions">
+        <el-button v-if="selected?.published_revision" :disabled="actionBusy" @click="changeDocument('withdraw')">撤回发布</el-button>
+        <el-button v-if="!selected?.archived" type="danger" plain :disabled="actionBusy" @click="changeDocument('archive')">归档文档</el-button>
+        <el-button v-else :disabled="actionBusy" @click="changeDocument('restore')">恢复文档</el-button>
+      </div>
+      <el-table :data="versions.revisions" row-key="id">
+        <el-table-column label="修订" width="70"><template #default="{ row }">#{{ row.number }}</template></el-table-column>
+        <el-table-column label="状态" min-width="170"><template #default="{ row }">{{ stateLabels[row.state] }}<p v-if="row.job" class="chunk-hint">{{ row.job.state === 'succeeded' ? '入库完成' : row.job.phase }} · {{ row.job.progress }}% · 尝试 {{ row.job.attempts }}/{{ row.job.max_attempts }}</p><el-text v-if="row.job?.error" type="danger">{{ row.job.error }}</el-text></template></el-table-column>
+        <el-table-column prop="chunks" label="分块" width="65" />
+        <el-table-column label="上传时间" width="170"><template #default="{ row }">{{ new Date(row.created_at).toLocaleString() }}</template></el-table-column>
+        <el-table-column label="操作" min-width="240"><template #default="{ row }">
+          <el-button v-if="['ready', 'published', 'superseded'].includes(row.state)" link @click="viewChunks(selectedId, `${selected?.source} #${row.number}`, row.id)">分块</el-button>
+          <a v-if="row.original_available" class="original-link" :href="`/api/documents/${selectedId}/revisions/${row.id}/original`">下载原件</a>
+          <el-button v-if="row.job?.state === 'failed'" link type="warning" :disabled="actionBusy" @click="retryRevision(row)">重试</el-button>
+          <el-button v-if="isAdmin && !selected?.archived && ['ready', 'superseded'].includes(row.state)" link type="primary" :disabled="actionBusy" @click="changeDocument('publish', row.id)">{{ row.state === 'superseded' ? '回滚至此版本' : '发布' }}</el-button>
+        </template></el-table-column>
+      </el-table>
+      <el-collapse class="audit-log"><el-collapse-item title="操作记录" name="events"><p v-for="(item, index) in versions.events" :key="index">{{ new Date(item.created_at).toLocaleString() }} · {{ eventLabels[item.action] ?? item.action }} · {{ item.actor_id ? '操作人 ' + item.actor_id.slice(0, 8) : '后台处理' }}</p></el-collapse-item></el-collapse>
+      <p class="chunk-hint">发布后生效；新修订处理失败不影响原发布版本。下载原件与历史预览仅供客服和管理员，发布与回滚由管理员执行。</p>
+    </el-dialog>
   </div>
 </template>
 
 <style scoped>
+.version-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.original-link { color: var(--brand-600); font-size: 13px; margin: 0 12px; }
+.audit-log { margin-top: 20px; }
+.document-scope { display: grid; gap: 10px; margin-bottom: 20px; }
+.document-scope p { color: var(--text-secondary); font-size: 12px; }
+@media (max-width: 600px) {
+  .head { flex-direction: column; gap: 12px; }
+  .block { padding: 16px; }
+  .pending__head { flex-wrap: wrap; gap: 10px; }
+}
 .head {
   display: flex;
   align-items: flex-start;
