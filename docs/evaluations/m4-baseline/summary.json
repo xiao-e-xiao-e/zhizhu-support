@@ -1,0 +1,14 @@
+{
+  "cases": 10,
+  "passed": 9,
+  "no_automatic_write": true,
+  "privacy_and_scope": true,
+  "manual_confirmation": {
+    "passed": true,
+    "same_ticket_replayed": true,
+    "ticket_count": 1
+  },
+  "faq_publish_flow": true,
+  "agent_tokens": 22853,
+  "faq_tokens": 292
+}

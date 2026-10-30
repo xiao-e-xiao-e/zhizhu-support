@@ -1,0 +1,30 @@
+# ===== Web 框架 =====
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.9
+
+# ===== 配置与校验 =====
+pydantic>=2.6.0
+pydantic-settings>=2.2.0
+python-dotenv>=1.0.0
+
+# ===== 向量检索 =====
+# fastembed: ONNX Runtime 驱动的本地嵌入，无需 PyTorch
+fastembed>=0.3.0
+# 默认中文语义嵌入模型
+# BAAI/bge-small-zh-v1.5 —— 512 维，约 95MB，CPU 可跑
+chromadb>=0.4.22
+numpy>=1.26.0
+
+# ===== LLM 调用 =====
+openai>=1.12.0
+
+# ===== 文档解析 =====
+PyPDF2>=3.0.0
+python-docx>=1.0.0
+
+# ===== 业务持久化与认证 =====
+SQLAlchemy>=2.0,<2.1
+alembic>=1.14,<2
+psycopg[binary]>=3.2,<4
+argon2-cffi>=23.1,<26

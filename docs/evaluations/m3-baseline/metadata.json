@@ -1,0 +1,16 @@
+{
+  "started_at": "2026-10-26T02:25:26.303027+00:00",
+  "model": "deepseek-v4-flash",
+  "embedding_model": "BAAI/bge-small-zh-v1.5",
+  "dataset_sha256": "8975534421de4d55860e78de46d32c1ef62c3cc69df2abe103f23887c3c6882b",
+  "system_prompt_sha256": "22ece62c032dd7219bb5cd8e21a2abb70a985f3fb99b120b2b2805b175619c7e",
+  "temperature": 0,
+  "top_k": 5,
+  "max_tokens": 1024,
+  "thinking": false,
+  "workers": 3,
+  "synthetic_documents": 20,
+  "cases": 60,
+  "scoring": "固定期望来源、关键事实词组及拒答词检测；不等价于人工语义正确率。引用仅验证编号有效，不验证蕴含。",
+  "scratch_path": "E:\\Project\\rag-knowledge-base-master\\backend\\storage\\evaluations\\d0969e07-9f97-400b-b9fe-7e5d0f0d7ee7"
+}

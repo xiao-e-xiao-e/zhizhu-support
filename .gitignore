@@ -1,5 +1,6 @@
 # 敏感信息
 .env
+.env.*.local
 
 # ChromaDB 数据库
 chroma_db/
@@ -9,6 +10,11 @@ __pycache__/
 *.pyc
 *.pyo
 .venv/
+.venv-dev/
+.pytest_cache/
+.ruff_cache/
+backend/storage/
+*.egg-info/
 venv/
 
 # IDE
@@ -17,3 +23,19 @@ venv/
 
 # 聊天记录
 chat_history.json
+
+# Node / 前端构建产物
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+*.log
+.DS_Store
+Thumbs.db
+
+# 本地协作元数据
+.workbuddy-ai/
+
+# 嵌入模型缓存（100MB+，首次使用自动下载，不入库）
+.model_cache/
